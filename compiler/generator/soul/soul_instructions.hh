@@ -28,7 +28,6 @@
 #include <utility>
 #include <cctype>
 
-#include "Text.hh"
 #include "text_instructions.hh"
 #include "faust/gui/PathBuilder.h"
 
@@ -42,14 +41,14 @@ struct SOULInstUIVisitor : public DispatchVisitor, public PathBuilder {
 
     using DispatchVisitor::visit;
 
-    SOULInstUIVisitor(int tab) : fTypeManager(FLOATMACRO, "*"), fTab(tab) {}
+    SOULInstUIVisitor(int tab) : fTypeManager(xfloat(), "*"), fTab(tab) {}
     
     void addMeta()
     {
         if (fMetaAux.size() > 0) {
             for (size_t i = 0; i < fMetaAux.size(); i++) {
                 if (!std::isdigit(fMetaAux[i].first[0])) {
-                    fOut << ", " << fMetaAux[i].first << ": " << quote(fMetaAux[i].second);
+                    fOut << ", " << "meta_" + fMetaAux[i].first << ": " << quote(fMetaAux[i].second);
                 }
             }
         }
@@ -67,17 +66,25 @@ struct SOULInstUIVisitor : public DispatchVisitor, public PathBuilder {
             vector<char> rep = {' ', '(', ')', '/', '\\', '.'};
             fOut << "input event " << fTypeManager.fTypeDirectTable[itfloat()]
             << " event_" << replaceCharList(inst->fLabel, rep, '_')
-            << " [[ label: " << quote(inst->fLabel)
-            << ", path: " << quote(buildPath(inst->fLabel))
-            << ", min: 0.0f, max: 1.0f, init: 0.0f, step: 1.0f";
+            << " [[ name: " << quote(inst->fLabel)
+            << ", group: " << quote(buildPath(inst->fLabel));
+            if (inst->fType != AddButtonInst::kDefaultButton) {
+                fOut << ", latching";
+            }
+            fOut<< ", text: \"off|on\""
+            << ", boolean";
             addMeta();
             fOut << " ]];";
         } else {
             fOut << "input event " << fTypeManager.fTypeDirectTable[itfloat()]
             << " event" << inst->fZone
-            << " [[ label: " << quote(inst->fLabel)
-            << ", path: " << quote(buildPath(inst->fLabel))
-            << ", min: 0.0f, max: 1.0f, init: 0.0f, step: 1.0f";
+            << " [[ name: " << quote(inst->fLabel)
+            << ", group: " << quote(buildPath(inst->fLabel));
+            if (inst->fType != AddButtonInst::kDefaultButton) {
+                fOut << ", latching";
+            }
+            fOut << ", text: \"off|on\""
+            << ", boolean";
             addMeta();
             fOut << " ]];";
         }
@@ -90,8 +97,8 @@ struct SOULInstUIVisitor : public DispatchVisitor, public PathBuilder {
             vector<char> rep = {' ', '(', ')', '/', '\\', '.'};
             fOut << "input event " << fTypeManager.fTypeDirectTable[itfloat()]
             << " event_" << replaceCharList(inst->fLabel, rep, '_')
-            << " [[ label: " << quote(inst->fLabel)
-            << ", path: " << quote(buildPath(inst->fLabel))
+            << " [[ name: " << quote(inst->fLabel)
+            << ", group: " << quote(buildPath(inst->fLabel))
             << ", min: " << checkReal(inst->fMin)
             << ", max: " << checkReal(inst->fMax)
             << ", init: " << checkReal(inst->fInit)
@@ -101,8 +108,8 @@ struct SOULInstUIVisitor : public DispatchVisitor, public PathBuilder {
         } else {
             fOut << "input event " << fTypeManager.fTypeDirectTable[itfloat()]
             << " event" << inst->fZone
-            << " [[ label: " << quote(inst->fLabel)
-            << ", path: " << quote(buildPath(inst->fLabel))
+            << " [[ name: " << quote(inst->fLabel)
+            << ", group: " << quote(buildPath(inst->fLabel))
             << ", min: " << checkReal(inst->fMin)
             << ", max: " << checkReal(inst->fMax)
             << ", init: " << checkReal(inst->fInit)
@@ -119,8 +126,8 @@ struct SOULInstUIVisitor : public DispatchVisitor, public PathBuilder {
             vector<char> rep = {' ', '(', ')', '/', '\\', '.'};
             fOut << "output event " << fTypeManager.fTypeDirectTable[itfloat()]
             << " event_" << quote(replaceCharList(inst->fLabel, rep, '_'))
-            << " [[ label: " << quote(inst->fLabel)
-            << ", path: " << quote(buildPath(inst->fLabel))
+            << " [[ name: " << quote(inst->fLabel)
+            << ", group: " << quote(buildPath(inst->fLabel))
             << ", min: " << checkReal(inst->fMin)
             << ", max: " << checkReal(inst->fMax);
             addMeta();
@@ -128,8 +135,8 @@ struct SOULInstUIVisitor : public DispatchVisitor, public PathBuilder {
         } else {
             fOut << "output event " << fTypeManager.fTypeDirectTable[itfloat()]
             << " event" << inst->fZone
-            << " [[ label: " << quote(inst->fLabel)
-            << ", path: " << quote(buildPath(inst->fLabel))
+            << " [[ name: " << quote(inst->fLabel)
+            << ", group: " << quote(buildPath(inst->fLabel))
             << ", min: " << checkReal(inst->fMin)
             << ", max: " << checkReal(inst->fMax);
             addMeta();
@@ -140,7 +147,17 @@ struct SOULInstUIVisitor : public DispatchVisitor, public PathBuilder {
     
     virtual void visit(OpenboxInst* inst)
     {
-        pushLabel(inst->fName);
+        switch (inst->fOrient) {
+            case OpenboxInst::kVerticalBox:
+                pushLabel("v:" + inst->fName);
+                break;
+            case OpenboxInst::kHorizontalBox:
+                pushLabel("h:" + inst->fName);
+                break;
+            case OpenboxInst::kTabBox:
+                pushLabel("t:" + inst->fName);
+                break;
+        }
         fMetaAux.clear();
     }
     
@@ -159,10 +176,19 @@ class SOULInstVisitor : public TextInstVisitor {
 
     // Whether to consider an 'int' as a 'boolean' later on in code generation
     bool fIntAsBool;
+    
+    inline string checkFloat(float val)
+    {
+        return (std::isinf(val)) ? "inf" : T(val);
+    }
+    inline string checkDouble(double val)
+    {
+        return (std::isinf(val)) ? "inf" : T(val);
+    }
 
    public:
     SOULInstVisitor(std::ostream* out, int tab = 0)
-        : TextInstVisitor(out, ".", new SOULStringTypeManager(FLOATMACRO, ""), tab)
+        : TextInstVisitor(out, ".", new SOULStringTypeManager(xfloat(), ""), tab)
     {
         // Polymath mapping int version
         gPolyMathLibTable["abs"]   = "abs";
@@ -190,6 +216,7 @@ class SOULInstVisitor : public TextInstVisitor {
         gPolyMathLibTable["log10f"]     = "log10";
         gPolyMathLibTable["powf"]       = "pow";
         gPolyMathLibTable["remainderf"] = "remainder";
+        gPolyMathLibTable["rintf"]      = "rint";
         gPolyMathLibTable["roundf"]     = "round";
         gPolyMathLibTable["sinf"]       = "sin";
         gPolyMathLibTable["sqrtf"]      = "sqrt";
@@ -224,6 +251,7 @@ class SOULInstVisitor : public TextInstVisitor {
         gPolyMathLibTable["log10"]     = "log10";
         gPolyMathLibTable["pow"]       = "pow";
         gPolyMathLibTable["remainder"] = "remainder";
+        gPolyMathLibTable["rint"]      = "rint";
         gPolyMathLibTable["round"]     = "round";
         gPolyMathLibTable["sin"]       = "sin";
         gPolyMathLibTable["sqrt"]      = "sqrt";
@@ -369,6 +397,8 @@ class SOULInstVisitor : public TextInstVisitor {
             EndLine();
         }
     }
+    
+    virtual void visit(FloatNumInst* inst) { *fOut << checkFloat(inst->fNum); }
 
     virtual void visit(FloatArrayNumInst* inst)
     {
@@ -390,6 +420,8 @@ class SOULInstVisitor : public TextInstVisitor {
         *fOut << ')';
     }
 
+    virtual void visit(DoubleNumInst* inst) { *fOut << checkDouble(inst->fNum); }
+    
     virtual void visit(DoubleArrayNumInst* inst)
     {
         char sep = '(';
@@ -413,21 +445,48 @@ class SOULInstVisitor : public TextInstVisitor {
     virtual void visit(Select2Inst* inst)
     {
         *fOut << "(bool (";
-
         fIntAsBool = true;
         inst->fCond->accept(this);
         fIntAsBool = false;
         *fOut << ") ? ";
-
         inst->fThen->accept(this);
         *fOut << " : ";
         inst->fElse->accept(this);
         *fOut << ")";
     }
+    
+    virtual void visit(IfInst* inst)
+    {
+        *fOut << "if ";
+        *fOut << "(bool ";
+        fIntAsBool = true;
+        visitCond(inst->fCond);
+        fIntAsBool = false;
+        *fOut << ")";
+        *fOut << " {";
+        fTab++;
+        tab(fTab, *fOut);
+        inst->fThen->accept(this);
+        fTab--;
+        back(1, *fOut);
+        if (inst->fElse->fCode.size() > 0) {
+            *fOut << "} else {";
+            fTab++;
+            tab(fTab, *fOut);
+            inst->fElse->accept(this);
+            fTab--;
+            back(1, *fOut);
+            *fOut << "}";
+        } else {
+            *fOut << "}";
+        }
+        tab(fTab, *fOut);
+    }
 
     virtual void visit(BinopInst* inst)
     {
-        if (isBoolOpcode(inst->fOpcode) && !fIntAsBool) {
+        bool int_as_bool = fIntAsBool;
+        if (isBoolOpcode(inst->fOpcode) && !int_as_bool) {
             *fOut << "int (";
         }
         *fOut << "(";
@@ -461,7 +520,7 @@ class SOULInstVisitor : public TextInstVisitor {
         }
 
         *fOut << ")";
-        if (isBoolOpcode(inst->fOpcode) && !fIntAsBool) {
+        if (isBoolOpcode(inst->fOpcode) && !int_as_bool) {
             *fOut << ")";
         }
     }
@@ -506,7 +565,7 @@ class SOULInstVisitor : public TextInstVisitor {
         tab(fTab, *fOut);
         inst->fCode->accept(this);
         fTab--;
-        tab(fTab, *fOut);
+        back(1, *fOut);
         *fOut << "}";
         tab(fTab, *fOut);
     }

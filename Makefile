@@ -1,9 +1,10 @@
-version := 2.17.8
+version := 2.22.5
 
 system	?= $(shell uname -s)
 
 DESTDIR ?=
 PREFIX ?= /usr/local
+INSTALL_LIBDIR ?= lib
 CROSS=i586-mingw32msvc-
 BUILDLOCATION := build
 DEBUGFOLDER := faustdebug
@@ -88,16 +89,19 @@ debug :
 	$(MAKE) -C $(BUILDLOCATION) FAUSTDIR=faustdebug CMAKEOPT=-DCMAKE_BUILD_TYPE=Debug
 #	$(MAKE) -C compiler debug -f $(MAKEFILE) prefix=$(prefix)
 
-plugin :
-	$(MAKE) -C compiler plugin -f $(MAKEFILE) prefix=$(prefix)
-
 ioslib :
 	$(MAKE) -C $(BUILDLOCATION) ioslib
 
 wasm :
-	mkdir -p wasm-libraries && cp libraries/*.lib libraries/old/*.lib wasm-libraries
 	$(MAKE) -C $(BUILDLOCATION) wasmlib
-	rm -rf wasm-libraries
+	$(MAKE) -C $(BUILDLOCATION) cmake WORKLET=on
+	$(MAKE) -C $(BUILDLOCATION) wasmglue
+	# Hack : be sure to use LIB_NAME define in build/wasmglue/CMakeLists.txt
+	echo "export default FaustModule;" >> $(BUILDLOCATION)/lib/libfaust-worklet-glue.js
+	# Fix for EMCC codegen bug
+	echo "var tempDouble, tempI64;" >> $(BUILDLOCATION)/lib/libfaust-worklet-glue.js
+	$(MAKE) -C $(BUILDLOCATION) cmake WORKLET=off
+	$(MAKE) -C $(BUILDLOCATION) wasmglue
 
 sound2faust :
 	$(MAKE) -C tools/sound2faust
@@ -117,7 +121,7 @@ help :
 	@echo 
 	@echo "Other targets"
 	@echo " 'debug'         : similar to 'all' target but with debug info. Output is in $(BUILDLOCATION)/$(DEBUGFOLDER)"
-	@echo " 'wasm'          : builds the Faust WebAssembly library"
+	@echo " 'wasm'          : builds the Faust WebAssembly libraries"
 	@echo " 'benchmark'     : builds the benchmark tools (see tools/benchmark)"
 	@echo " 'remote'        : builds the libfaustremote.a library and the Faust RemoteServer"
 	@echo " 'sound2faust'   : builds the sound2faust utilities (requires libsndfile)"
@@ -175,7 +179,7 @@ format :
 
 # the target 'lib' can be used to init and update the libraries submodule
 updatesubmodules :
-	if test -d .git; then git submodule update --init; fi
+	if test -d .git; then git submodule update --init --recursive; fi
 
 
 doclib : updatesubmodules
@@ -195,7 +199,7 @@ uninstall :
 devinstall:
 	$(MAKE) -C tools/benchmark install
 
-# make a faust distribution tarball
+# make a Faust distribution tarball
 dist = faust-$(version)
 submodules = libraries
 dist :

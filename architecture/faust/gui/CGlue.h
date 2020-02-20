@@ -1,22 +1,25 @@
+/************************** BEGIN CGlue.h **************************/
 /************************************************************************
- ************************************************************************
-    FAUST Architecture File
-    Copyright (C) 2003-2013 GRAME, Centre National de Creation Musicale
-    ---------------------------------------------------------------------
-    This Architecture section is free software; you can redistribute it
-    and/or modify it under the terms of the GNU General Public License
-    as published by the Free Software Foundation; either version 3 of
-    the License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; If not, see <http://www.gnu.org/licenses/>.
-
- ************************************************************************
+ FAUST Architecture File
+ Copyright (C) 2018 GRAME, Centre National de Creation Musicale
+ ---------------------------------------------------------------------
+ This Architecture section is free software; you can redistribute it
+ and/or modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 3 of
+ the License, or (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; If not, see <http://www.gnu.org/licenses/>.
+ 
+ EXCEPTION : As a special exception, you may create a larger work
+ that contains this FAUST architecture section and distribute
+ that work under terms of your choice, so long as this FAUST
+ architecture section is not modified.
  ************************************************************************/
 
 #ifndef CGLUE_H
@@ -456,23 +459,23 @@ static void buildMetaGlue(MetaGlue* glue, Meta* meta)
  * Memory manager glue code
  ******************************************************************************/
 
-static void* allocateManagerGlue(void* cpp_interface, size_t size)
+static void* allocateMemoryManagerGlue(void* cpp_interface, size_t size)
 {
     dsp_memory_manager* manager_interface = static_cast<dsp_memory_manager*>(cpp_interface);
     return manager_interface->allocate(size);
 }
     
-static void destroyManagerGlue(void* cpp_interface, void* ptr)
+static void destroyMemoryManagerGlue(void* cpp_interface, void* ptr)
 {
     dsp_memory_manager* manager_interface = static_cast<dsp_memory_manager*>(cpp_interface);
     manager_interface->destroy(ptr);
 }
 
-static void buildManagerGlue(ManagerGlue* glue, dsp_memory_manager* manager)
+static void buildManagerGlue(MemoryManagerGlue* glue, dsp_memory_manager* manager)
 {
     glue->managerInterface = manager;
-    glue->allocate = allocateManagerGlue;
-    glue->destroy = destroyManagerGlue;
+    glue->allocate = allocateMemoryManagerGlue;
+    glue->destroy = destroyMemoryManagerGlue;
 }
 
 #ifdef __cplusplus
@@ -480,3 +483,4 @@ static void buildManagerGlue(ManagerGlue* glue, dsp_memory_manager* manager)
 #endif
 
 #endif
+/**************************  END  CGlue.h **************************/

@@ -1,3 +1,4 @@
+/************************** BEGIN dsp-combiner.h **************************/
 /************************************************************************
  FAUST Architecture File
  Copyright (C) 2003-2019 GRAME, Centre National de Creation Musicale
@@ -427,7 +428,7 @@ static dsp* createDSPSequencer(dsp* dsp1, dsp* dsp2, std::string& error)
     }
 }
 
-static dsp* createDSPParallelize(dsp* dsp1, dsp* dsp2, std::string& error)
+static dsp* createDSPParallelizer(dsp* dsp1, dsp* dsp2, std::string& error)
 {
     return new dsp_parallelizer(dsp1, dsp2);
 }
@@ -504,3 +505,4 @@ static dsp* createDSPRecursiver(dsp* dsp1, dsp* dsp2, std::string& error)
 #endif
 
 #endif
+/**************************  END  dsp-combiner.h **************************/

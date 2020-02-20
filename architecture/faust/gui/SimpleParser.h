@@ -1,3 +1,4 @@
+/************************** BEGIN SimpleParser.h **************************/
 /************************************************************************
  FAUST Architecture File
  Copyright (C) 2003-2017 GRAME, Centre National de Creation Musicale
@@ -35,6 +36,7 @@
 #include <map>
 #include <string>
 #include <fstream>
+#include <sstream>
 #include <iostream>
 #include <ctype.h>
 
@@ -47,32 +49,16 @@ struct itemInfo {
     std::string label;
     std::string url;
     std::string address;
-    std::string index;
-    std::string init;
-    std::string min;
-    std::string max;
-    std::string step;
+    int index;
+    double init;
+    double min;
+    double max;
+    double step;
     std::vector<std::pair<std::string, std::string> > meta;
+    
+    itemInfo():index(0), init(0.), min(0.), max(0.), step(0.)
+    {}
 };
-
-/*
-// Menu {'low' : 440.0; 'mid' : 880.0; 'hi' : 1760.0}
-static bool parseMenuList(const char*& p, std::vector<std::string>& names, std::vector<double>& values);
-static bool parseMenuItem(const char*& p, std::string& name, double& value);
-
-// Menu {'foo.wav'; 'bar.wav'}
-static bool parseMenuList2(const char*& p, std::vector<std::string>& names, bool debug = false);
-static bool parseMenuItem2(const char*& p, std::string& name);
-
-static void skipBlank(const char*& p);
-static bool parseChar(const char*& p, char x);
-static bool parseWord(const char*& p, const char* w);
-static bool parseString(const char*& p, char quote, std::string& s);
-static bool parseSQString(const char*& p, std::string& s);
-static bool parseDQString(const char*& p, std::string& s);
-static bool parseDouble(const char*& p, double& x);
-static bool parseList(const char*& p, std::vector<std::string>& items);
-*/
 
 // ---------------------------------------------------------------------
 //                          Elementary parsers
@@ -150,39 +136,23 @@ static bool parseWord(const char*& p, const char* w)
  */
 static bool parseDouble(const char*& p, double& x)
 {
-    double sign = +1.0;    // sign of the number
-    double ipart = 0;      // integral part of the number
-    double dpart = 0;      // decimal part of the number before division
-    double dcoef = 1.0;    // division factor for the decimal part
+    std::stringstream reader(p);
+    std::streambuf* pbuf = reader.rdbuf();
     
-    bool valid = false;    // true if the number contains at least one digit
-    skipBlank(p);
-    const char* saved = p; // to restore position if we fail
+    // Keep position before parsing
+    std::streamsize size1 = pbuf->in_avail();
     
-    if (parseChar(p, '+')) {
-        sign = 1.0;
-    } else if (parseChar(p, '-')) {
-        sign = -1.0;
-    }
-    while (isdigit(*p)) {
-        valid = true;
-        ipart = ipart*10 + (*p - '0');
-        p++;
-    }
-    if (parseChar(p, '.')) {
-        while (isdigit(*p)) {
-            valid = true;
-            dpart = dpart*10 + (*p - '0');
-            dcoef *= 10.0;
-            p++;
-        }
-    }
-    if (valid)  {
-        x = sign*(ipart + dpart/dcoef);
-    } else {
-        p = saved;
-    }
-    return valid;
+    // Parse the number
+    reader >> x;
+    
+    // Keep position after parsing
+    std::streamsize size2 = pbuf->in_avail();
+    
+    // Move from the actual size
+    p += (size1 - size2);
+    
+    // True if the number contains at least one digit
+    return (size1 > size2);
 }
 
 /**
@@ -260,6 +230,7 @@ static bool parseMenuItem(const char*& p, std::string& name, double& value)
 static bool parseMenuItem2(const char*& p, std::string& name)
 {
     const char* saved = p;  // to restore position if we fail
+    // single quoted
     if (parseSQString(p, name)) {
         return true;
     } else {
@@ -355,6 +326,7 @@ static bool parseList(const char*& p, std::vector<std::string>& items)
 
 static bool parseMetaData(const char*& p, std::map<std::string, std::string>& metadatas)
 {
+    const char* saved = p; // to restore position if we fail
     std::string metaKey, metaValue;
     if (parseChar(p, ':') && parseChar(p, '[')) {
         do { 
@@ -364,12 +336,14 @@ static bool parseMetaData(const char*& p, std::map<std::string, std::string>& me
         } while (tryChar(p, ','));
         return parseChar(p, ']');
     } else {
+        p = saved;
         return false;
     }
 }
 
 static bool parseItemMetaData(const char*& p, std::vector<std::pair<std::string, std::string> >& metadatas)
 {
+    const char* saved = p; // to restore position if we fail
     std::string metaKey, metaValue;
     if (parseChar(p, ':') && parseChar(p, '[')) {
         do { 
@@ -379,6 +353,7 @@ static bool parseItemMetaData(const char*& p, std::vector<std::pair<std::string,
         } while (tryChar(p, ','));
         return parseChar(p, ']');
     } else {
+        p = saved;
         return false;
     }
 }
@@ -388,15 +363,17 @@ static bool parseItemMetaData(const char*& p, std::vector<std::pair<std::string,
 // "name" : "...", "inputs" : "...", "outputs" : "...", ...
 // and store the result as key/value
 /// ---------------------------------------------------------------------
-static bool parseGlobalMetaData(const char*& p, std::string& key, std::string& value, std::map<std::string, std::string>& metadatas, std::vector<std::string>& items)
+static bool parseGlobalMetaData(const char*& p, std::string& key, std::string& value, double& dbl, std::map<std::string, std::string>& metadatas, std::vector<std::string>& items)
 {
+    const char* saved = p; // to restore position if we fail
     if (parseDQString(p, key)) {
         if (key == "meta") {
             return parseMetaData(p, metadatas);
         } else {
-            return parseChar(p, ':') && (parseDQString(p, value) || parseList(p, items));
+            return parseChar(p, ':') && (parseDQString(p, value) || parseList(p, items) || parseDouble(p, dbl));
         }
     } else {
+        p = saved;
         return false;
     }
 }
@@ -406,12 +383,14 @@ static bool parseGlobalMetaData(const char*& p, std::string& key, std::string& v
 // "type" : "...", "label" : "...", "address" : "...", ...
 // and store the result in uiItems Vector
 /// ---------------------------------------------------------------------
-static bool parseUI(const char*& p, std::vector<itemInfo*>& uiItems, int& numItems)
+static bool parseUI(const char*& p, std::vector<itemInfo>& uiItems, int& numItems)
 {
+    const char* saved = p; // to restore position if we fail
     if (parseChar(p, '{')) {
    
         std::string label;
         std::string value;
+        double dbl = 0;
         
         do {
             if (parseDQString(p, label)) {
@@ -420,99 +399,92 @@ static bool parseUI(const char*& p, std::vector<itemInfo*>& uiItems, int& numIte
                         numItems++;
                     }
                     if (parseChar(p, ':') && parseDQString(p, value)) {   
-                        itemInfo* item = new itemInfo;
-                        item->type = value;
+                        itemInfo item;
+                        item.type = value;
                         uiItems.push_back(item);
                     }
                 }
                 
                 else if (label == "label") {
                     if (parseChar(p, ':') && parseDQString(p, value)) {
-                        itemInfo* item = uiItems[numItems];
-                        item->label = value;
+                        uiItems[numItems].label = value;
                     }
                 }
                 
                 else if (label == "url") {
                     if (parseChar(p, ':') && parseDQString(p, value)) {
-                        itemInfo* item = uiItems[numItems];
-                        item->url = value;
+                        uiItems[numItems].url = value;
                     }
                 }
                 
                 else if (label == "address") {
                     if (parseChar(p, ':') && parseDQString(p, value)) {
-                        itemInfo* item = uiItems[numItems];
-                        item->address = value;
+                        uiItems[numItems].address = value;
                     }
                 }
                 
                 else if (label == "index") {
-                    if (parseChar(p, ':') && parseDQString(p, value)) {
-                        itemInfo* item = uiItems[numItems];
-                        item->index = value;
+                    if (parseChar(p, ':') && parseDouble(p, dbl)) {
+                        uiItems[numItems].index = int(dbl);
                     }
                 }
                 
                 else if (label == "meta") {
-                    itemInfo* item = uiItems[numItems];
-                    if (!parseItemMetaData(p, item->meta)) {
+                    if (!parseItemMetaData(p, uiItems[numItems].meta)) {
                         return false;
                     }
                 }
                 
                 else if (label == "init") {
-                    if (parseChar(p, ':') && parseDQString(p, value)) {
-                        itemInfo* item = uiItems[numItems];
-                        item->init = value;
+                    if (parseChar(p, ':') && parseDouble(p, dbl)) {
+                        uiItems[numItems].init = dbl;
                     }
                 }
                 
                 else if (label == "min") {
-                    if (parseChar(p, ':') && parseDQString(p, value)) {
-                        itemInfo* item = uiItems[numItems];
-                        item->min = value;
+                    if (parseChar(p, ':') && parseDouble(p, dbl)) {
+                        uiItems[numItems].min = dbl;
                     }
                 }
                 
                 else if (label == "max") {
-                    if (parseChar(p, ':') && parseDQString(p, value)) {
-                        itemInfo* item = uiItems[numItems];
-                        item->max = value;
+                    if (parseChar(p, ':') && parseDouble(p, dbl)) {
+                        uiItems[numItems].max = dbl;
                     }
                 }
                 
-                else if (label == "step"){
-                    if (parseChar(p, ':') && parseDQString(p, value)) {
-                        itemInfo* item = uiItems[numItems];
-                        item->step = value;
+                else if (label == "step") {
+                    if (parseChar(p, ':') && parseDouble(p, dbl)) {
+                        uiItems[numItems].step = dbl;
                     }
                 }
                 
                 else if (label == "items") {
                     if (parseChar(p, ':') && parseChar(p, '[')) {
-                        do { 
+                        do {
                             if (!parseUI(p, uiItems, numItems)) {
+                                p = saved;
                                 return false;
                             }
                         } while (tryChar(p, ','));
                         if (parseChar(p, ']')) {
-                            itemInfo* item = new itemInfo;
-                            item->type = "close";
+                            itemInfo item;
+                            item.type = "close";
                             uiItems.push_back(item);
                             numItems++;
                         }
                     }
                 }
             } else {
+                p = saved;
                 return false;
             }
             
         } while (tryChar(p, ','));
-        
+    
         return parseChar(p, '}');
     } else {
-        return false;
+        return true; // "items": [] is valid
     }
 }
 
@@ -523,25 +495,28 @@ static bool parseUI(const char*& p, std::vector<itemInfo*>& uiItems, int& numIte
 // and store the result in map Metadatas and vector containing the items of the interface. Returns true if parsing was successfull.
 /// ---------------------------------------------------------------------
 static bool parseJson(const char*& p,
-                      std::map<std::string, std::string>& metaDatas0,
+                      std::map<std::string, std::pair<std::string, double> >& metaDatas0,
                       std::map<std::string, std::string>& metaDatas1,
                       std::map<std::string, std::vector<std::string> >& metaDatas2,
-                      std::vector<itemInfo*>& uiItems)
+                      std::vector<itemInfo>& uiItems)
 {
     parseChar(p, '{');
     
     do {
         std::string key;
         std::string value;
+        double dbl = 0;
         std::vector<std::string> items;
-        if (parseGlobalMetaData(p, key, value, metaDatas1, items)) {
+        if (parseGlobalMetaData(p, key, value, dbl, metaDatas1, items)) {
             if (key != "meta") {
                 // keep "name", "inputs", "outputs" key/value pairs
                 if (items.size() > 0) {
                     metaDatas2[key] = items;
                     items.clear();
+                } else if (value != "") {
+                    metaDatas0[key].first = value;
                 } else {
-                    metaDatas0[key] = value;
+                    metaDatas0[key].second = dbl;
                 }
             }
         } else if (key == "ui") {
@@ -554,3 +529,4 @@ static bool parseJson(const char*& p,
 }
 
 #endif // SIMPLEPARSER_H
+/**************************  END  SimpleParser.h **************************/

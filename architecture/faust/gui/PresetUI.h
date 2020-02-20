@@ -1,3 +1,4 @@
+/************************** BEGIN PresetUI.h **************************/
 /************************************************************************
  FAUST Architecture File
  Copyright (C) 2018 GRAME, Centre National de Creation Musicale
@@ -26,27 +27,34 @@
 
 #include <string>
 #include <iostream>
-#include <sstream>
 
 #include "faust/gui/DecoratorUI.h"
 #include "faust/gui/FUI.h"
 #include "faust/gui/GUI.h"
 
-class PresetUI;
-
-struct LoaderUI : public GUI
-{
-    PresetUI* fPresetUI;
-    
-    LoaderUI(PresetUI* presetui);
-        
-};
+/*
+ Decorates an UI to add preset management:
+ - a 'preset' num entry allows to select a given preset
+ - a 'load' button restores the state of the currently selected preset
+ - a 'save' button saves the state of the currently selected preset
+ - a 'reset' button restores te UI default state
+ Presets are saved in separated text files using the FUI model.
+*/
 
 class PresetUI : public DecoratorUI
 {
-    friend LoaderUI;
-		
     private:
+    
+        struct LoaderUI : public GUI
+        {
+            LoaderUI(PresetUI* presetui)
+            {
+                // uiCallbackItem(s) are deleted in GUI
+                new uiCallbackItem(this, &presetui->fLoad, PresetUI::load, presetui);
+                new uiCallbackItem(this, &presetui->fSave, PresetUI::save, presetui);
+                new uiCallbackItem(this, &presetui->fReset, PresetUI::reset, presetui);
+            }
+        };
     
         int fGroupCount;
         FAUSTFLOAT fPreset;
@@ -55,7 +63,7 @@ class PresetUI : public DecoratorUI
         FAUSTFLOAT fReset;
         FUI fFileUI;
         LoaderUI fLoaderUI;
-        std::string fRootFolder;
+        const std::string fRootFolder;
     
         static void load(FAUSTFLOAT val, void* arg)
         {
@@ -109,30 +117,22 @@ class PresetUI : public DecoratorUI
     
         void saveDefault()
         {
-            std::stringstream str;
-            str << fRootFolder << "_default";
-            fFileUI.saveState(str.str().c_str());
+            fFileUI.saveState((fRootFolder + "_default").c_str());
         }
         
         void loadDefault()
         {
-            std::stringstream str;
-            str << fRootFolder << "_default";
-            fFileUI.recallState(str.str().c_str());
+            fFileUI.recallState((fRootFolder + "_default").c_str());
         }
     
         void saveState()
         {
-            std::stringstream str;
-            str << fRootFolder << "_preset" << int(fPreset);
-            fFileUI.saveState(str.str().c_str());
+            fFileUI.saveState((fRootFolder + "_preset" + std::to_string(fPreset)).c_str());
         }
     
         void loadState()
         {
-            std::stringstream str;
-            str << fRootFolder << "_preset" << int(fPreset);
-            fFileUI.recallState(str.str().c_str());
+            fFileUI.recallState((fRootFolder + "_preset" + std::to_string(fPreset)).c_str());
         }
     
         // -- widget's layouts
@@ -217,11 +217,5 @@ class PresetUI : public DecoratorUI
 
 };
 
-LoaderUI::LoaderUI(PresetUI* presetui)
-{
-    new uiCallbackItem(this, &presetui->fLoad, PresetUI::load, presetui);
-    new uiCallbackItem(this, &presetui->fSave, PresetUI::save, presetui);
-    new uiCallbackItem(this, &presetui->fReset, PresetUI::reset, presetui);
-}
-
 #endif
+/**************************  END  PresetUI.h **************************/

@@ -44,6 +44,11 @@
 #include "fbc_interpreter.hh"
 //#include "fbc_vec_interpreter.hh"
 
+static inline void checkToken(const std::string& token, const std::string& expected)
+{
+    if (token != expected) throw faustexception("ERROR : unrecognized file format [" + token + "] [" + expected + "]\n");
+}
+
 class interpreter_dsp_factory;
 
 typedef class faust_smartptr<interpreter_dsp_factory> SDsp_factory;
@@ -254,9 +259,10 @@ struct interpreter_dsp_factory_aux : public dsp_factory_imp {
         int         file_num;
         getline(*in, file_version);
 
-        std::stringstream version_reader(file_version);
-        version_reader >> dummy;  // Read "file_version" token
-        version_reader >> file_num;
+        std::stringstream file_version_reader(file_version);
+        file_version_reader >> dummy;  // Read "file_version" token
+        checkToken(dummy, "file_version");
+        file_version_reader >> file_num;
 
         if (INTERP_FILE_VERSION != file_num) {
             std::stringstream error;
@@ -268,17 +274,28 @@ struct interpreter_dsp_factory_aux : public dsp_factory_imp {
         // Read "version" line
         std::string version;
         getline(*in, version);
-
+        
+        std::stringstream version_reader(version);
+        version_reader >> dummy;  // Read "Faust" token
+        checkToken(dummy, "Faust");
+        version_reader >> dummy;  // Read "version" token
+        checkToken(dummy, "version");
+        
         // Read "compile_options" line
         std::string compile_options;
         getline(*in, compile_options);
-
+        
+        std::stringstream compile_options_reader(compile_options);
+        compile_options_reader >> dummy;  // Read "compile_options" token
+        checkToken(dummy, "compile_options");
+       
         // Read name
         std::string name, factory_name;
         getline(*in, name);
 
         std::stringstream name_reader(name);
         name_reader >> dummy;  // Read "name" token
+        checkToken(dummy, "name");
         name_reader >> factory_name;
 
         // Read sha_key
@@ -287,6 +304,7 @@ struct interpreter_dsp_factory_aux : public dsp_factory_imp {
 
         std::stringstream sha_key_line_reader(sha_key_line);
         sha_key_line_reader >> dummy;  // Read "sha_key" token
+        checkToken(dummy, "sha_key");
         sha_key_line_reader >> sha_key;
 
         // Read opt_level
@@ -296,6 +314,7 @@ struct interpreter_dsp_factory_aux : public dsp_factory_imp {
 
         std::stringstream opt_level_line_reader(opt_level_line);
         opt_level_line_reader >> dummy;  // Read "opt_level" token
+        checkToken(dummy, "opt_level");
         opt_level_line_reader >> opt_level;
 
         // Read inputs/outputs
@@ -306,9 +325,11 @@ struct interpreter_dsp_factory_aux : public dsp_factory_imp {
         std::stringstream in_out_reader(ins_outs);
 
         in_out_reader >> dummy;  // Read "inputs" token
+        checkToken(dummy, "inputs");
         in_out_reader >> inputs;
 
         in_out_reader >> dummy;  // Read "outputs" token
+        checkToken(dummy, "outputs");
         in_out_reader >> outputs;
 
         // Read int/real heap size and sr offset
@@ -319,21 +340,27 @@ struct interpreter_dsp_factory_aux : public dsp_factory_imp {
         std::stringstream heap_size_reader(heap_size);
 
         heap_size_reader >> dummy;  // Read "int_heap_size" token
+        checkToken(dummy, "int_heap_size");
         heap_size_reader >> int_heap_size;
 
         heap_size_reader >> dummy;  // Read "real_heap_size" token
+        checkToken(dummy, "real_heap_size");
         heap_size_reader >> real_heap_size;
 
         heap_size_reader >> dummy;  // Read "sound_heap_size" token
+        checkToken(dummy, "sound_heap_size");
         heap_size_reader >> sound_heap_size;
 
         heap_size_reader >> dummy;  // Read "sr_offet" token
+        checkToken(dummy, "sr_offset");
         heap_size_reader >> sr_offset;
 
         heap_size_reader >> dummy;  // Read "count_offset" token
+        checkToken(dummy, "count_offset");
         heap_size_reader >> count_offset;
 
         heap_size_reader >> dummy;  // Read "iota_offset" token
+        checkToken(dummy, "iota_offset");
         heap_size_reader >> iota_offset;
 
         // Read meta block
@@ -669,12 +696,12 @@ class interpreter_dsp_aux : public interpreter_dsp_base {
         fFBCExecutor = factory->createFBCExecutor();
         fInitialized = false;
         fCycle       = 0;
-        /*
-        #ifdef MACHINE
-                FBCCPPGenerator<T> cpp_generator(this->fFactory);
-                cpp_generator.generateCode(std::cout);
-        #endif
-        */
+    /*
+    #ifdef MACHINE
+        FBCCPPGenerator<T> cpp_generator(this->fFactory);
+        cpp_generator.generateCode(std::cout);
+    #endif
+    */
         fTraceOutput = getenv("FAUST_INTERP_OUTPUT") != NULL;
     }
 
@@ -694,7 +721,6 @@ class interpreter_dsp_aux : public interpreter_dsp_base {
         }
 
         std::cout << "freezeValues Real" << std::endl;
-        typename std::map<int, T>::iterator it2;
         for (auto& it2 : real_map) {
             std::cout << "offset " << it2.first << " value " << it2.second << std::endl;
             this->fRealHeap[it2.first] = it2.second;
@@ -722,33 +748,81 @@ class interpreter_dsp_aux : public interpreter_dsp_base {
 
     virtual void classInit(int sample_rate)
     {
-        // Execute static init instructions
-        fFBCExecutor->ExecuteBlock(fFactory->fStaticInitBlock);
+        if (TRACE > 0) {
+            std::cout << "------------------------" << std::endl;
+            std::cout << "classInit " << sample_rate << std::endl;
+        }
+        
+        try {
+            // Execute static init instructions
+            fFBCExecutor->ExecuteBlock(fFactory->fStaticInitBlock);
+        } catch (faustexception& e) {
+            std::cerr << e.Message();
+            exit(1);
+        }
     }
 
     virtual void instanceConstants(int sample_rate)
     {
+        if (TRACE > 0) {
+            std::cout << "------------------------" << std::endl;
+            std::cout << "instanceConstants " << sample_rate << std::endl;
+        }
+        
         // Store sample_rate in 'fSampleRate' variable at correct offset in fIntHeap
         fFBCExecutor->setIntValue(fFactory->fSROffset, sample_rate);
 
-        // Execute state init instructions
-        fFBCExecutor->ExecuteBlock(fFactory->fInitBlock);
+        try {
+            // Execute state init instructions
+            fFBCExecutor->ExecuteBlock(fFactory->fInitBlock);
+        } catch (faustexception& e) {
+            std::cerr << e.Message();
+            exit(1);
+        }
     }
 
     virtual void instanceResetUserInterface()
     {
-        // Execute reset UI instructions
-        fFBCExecutor->ExecuteBlock(fFactory->fResetUIBlock);
+        if (TRACE > 0) {
+            std::cout << "------------------------" << std::endl;
+            std::cout << "instanceResetUserInterface " << std::endl;
+        }
+        
+        try {
+            // Execute reset UI instructions
+            fFBCExecutor->ExecuteBlock(fFactory->fResetUIBlock);
+        } catch (faustexception& e) {
+            std::cerr << e.Message();
+            exit(1);
+        }
     }
 
     virtual void instanceClear()
     {
-        // Execute clear instructions
-        fFBCExecutor->ExecuteBlock(fFactory->fClearBlock);
+        if (TRACE > 0) {
+            std::cout << "------------------------" << std::endl;
+            std::cout << "instanceClear " << std::endl;
+        }
+        
+        try {
+            // Execute clear instructions
+            fFBCExecutor->ExecuteBlock(fFactory->fClearBlock);
+        } catch (faustexception& e) {
+            std::cerr << e.Message();
+            exit(1);
+        }
     }
 
     virtual void instanceInit(int sample_rate)
     {
+        if (TRACE > 0) {
+            std::cout << "------------------------" << std::endl;
+            std::cout << "instanceInit " << sample_rate << std::endl;
+        }
+        
+        // classInit has to be called for each instance since the tables are actually not shared between instances
+        classInit(sample_rate);
+        
         instanceConstants(sample_rate);
         instanceResetUserInterface();
         instanceClear();
@@ -756,20 +830,31 @@ class interpreter_dsp_aux : public interpreter_dsp_base {
 
     virtual void init(int sample_rate)
     {
+        if (TRACE > 0) {
+            std::cout << "------------------------" << std::endl;
+            std::cout << "init " << sample_rate << std::endl;
+        }
+        
         fInitialized = true;
-        classInit(sample_rate);
+        
+        // classInit is not called here since the tables are actually not shared between instances
         instanceInit(sample_rate);
-        /*
+    /*
     #ifdef MACHINE
         FBCCPPGenerator<T> cpp_generator(this->fFactory);
         cpp_generator.generateCode(std::cout);
     #endif
-        */
+    */
     }
 
     virtual void buildUserInterface(UITemplate* glue)
     {
-        fFBCExecutor->ExecuteBuildUserInterface(fFactory->fUserInterfaceBlock, glue);
+        try {
+            fFBCExecutor->ExecuteBuildUserInterface(fFactory->fUserInterfaceBlock, glue);
+        } catch (faustexception& e) {
+            std::cerr << e.Message();
+            exit(1);
+        }
     }
 
     void ExecuteVecBlock(FBCBlockInstruction<T>* block, int vec_size)
@@ -805,6 +890,12 @@ class interpreter_dsp_aux : public interpreter_dsp_base {
         if (TRACE > 0 && !fInitialized) {
             std::cout << "======== DSP is not initialized ! ========" << std::endl;
         } else {
+            
+            if (TRACE > 0) {
+                std::cout << "------------------------" << std::endl;
+                std::cout << "compute " << count << std::endl;
+            }
+            
             fCycle++;
 
             // std::cout << "compute " << count << std::endl;
@@ -821,21 +912,24 @@ class interpreter_dsp_aux : public interpreter_dsp_base {
 
             // Set count in 'count' variable at the correct offset in fIntHeap
             fFBCExecutor->setIntValue(fFactory->fCountOffset, count);
-
-            // Executes the 'control' block
-            fFBCExecutor->ExecuteBlock(fFactory->fComputeBlock);
-
+            
             try {
+                
+                // Executes the 'control' block
+                fFBCExecutor->ExecuteBlock(fFactory->fComputeBlock);
+
                 // Executes the 'DSP' block
                 fFBCExecutor->ExecuteBlock(fFactory->fComputeDSPBlock);
+                
             } catch (faustexception& e) {
-                std::cout << e.Message();
-                fFBCExecutor->dumpMemory(fFactory->fComputeDSPBlock, fFactory->getName(),
+                std::cerr << e.Message();
+                fFBCExecutor->dumpMemory(fFactory->fComputeDSPBlock,
+                                         fFactory->getName(),
                                          "DumpMem-" + fFactory->getName() + std::to_string(fCycle) + ".txt");
                 std::ofstream code_out("DumpCode-" + fFactory->getName() + ".txt");
                 fFactory->write(&code_out, false);
                 // If needed we exit
-                if (e.Message() == "Interpreter exit\n") exit(1);
+                if (e.Message() == "Interpreter exit\n") throw std::exception();
             }
 
             if ((TRACE == 7) && (fCycle < 4)) {
@@ -1011,12 +1105,12 @@ class interpreter_dsp_aux_pe : public interpreter_dsp_aux<T, TRACE> {
         this->fComputeBlock->write(&std::cout, false);
         this->fComputeDSPBlock->write(&std::cout, false);
         */
-        /*
-        #ifdef MACHINE
-            FBCCPPGenerator<T> cpp_generator(this->fFactory);
-            cpp_generator.generateCode(std::cout, this->fComputeBlock, this->fComputeDSPBlock);
-        #endif
-        */
+    /*
+    #ifdef MACHINE
+        FBCCPPGenerator<T> cpp_generator(this->fFactory);
+        cpp_generator.generateCode(std::cout, this->fComputeBlock, this->fComputeDSPBlock);
+    #endif
+    */
     }
 
     virtual void compute(int count, FAUSTFLOAT** inputs_aux, FAUSTFLOAT** outputs_aux)
@@ -1051,99 +1145,6 @@ class interpreter_dsp_aux_pe : public interpreter_dsp_aux<T, TRACE> {
             this->fFBCExecutor->ExecuteBlock(this->fComputeDSPBlock, true);
 #endif
         }
-    }
-};
-
-/*
-Computing using on a down-sampled version of signals
-
-TODO:
-
-- anti alias filter at input
-- interpolation at output
-
-*/
-
-template <class T, int TRACE>
-class interpreter_dsp_aux_down : public interpreter_dsp_aux<T, TRACE> {
-   private:
-    int fDownSamplingFactor;
-
-   public:
-    interpreter_dsp_aux_down(interpreter_dsp_factory_aux<T, TRACE>* factory, int down_sampling_factor)
-        : interpreter_dsp_aux<T, TRACE>(factory), fDownSamplingFactor(down_sampling_factor)
-    {
-        // TODO
-        /*
-        // Allocate and set downsampled inputs/outputs
-        for (int i = 0; i < this->fFactory->fNumInputs; i++) {
-            this->fInputs[i] = (this->fFactory->getMemoryManager())
-                                   ? static_cast<T*>(this->fFactory->allocate(sizeof(T) * 2048))
-                                   : new T[2048];
-        }
-        for (int i = 0; i < this->fFactory->fNumOutputs; i++) {
-            this->fOutputs[i] = (this->fFactory->getMemoryManager())
-                                    ? static_cast<T*>(this->fFactory->allocate(sizeof(T) * 2048))
-                                    : new T[2048];
-        }
-        */
-    }
-
-    virtual ~interpreter_dsp_aux_down()
-    {
-        // TODO
-        /*
-        // Delete downsampled inputs/outputs
-        for (int i = 0; i < this->fFactory->fNumInputs; i++) {
-            (this->fFactory->getMemoryManager()) ? this->fFactory->destroy(this->fInputs[i])
-                                                 : delete[] this->fInputs[i];
-        }
-        for (int i = 0; i < this->fFactory->fNumOutputs; i++) {
-            (this->fFactory->getMemoryManager()) ? this->fFactory->destroy(this->fOutputs[i])
-                                                 : delete[] this->fOutputs[i];
-        }
-        */
-    }
-
-    virtual void init(int sample_rate)
-    {
-        this->classInit(sample_rate / fDownSamplingFactor);
-        this->instanceInit(sample_rate / fDownSamplingFactor);
-    }
-
-    virtual void compute(int count, FAUSTFLOAT** inputs_aux, FAUSTFLOAT** outputs_aux)
-    {
-        if (count == 0) return;  // Beware: compiled loop don't work with an index of 0
-
-        T** inputs  = reinterpret_cast<T**>(inputs_aux);
-        T** outputs = reinterpret_cast<T**>(outputs_aux);
-
-        // Downsample inputs
-        for (int i = 0; i < this->fFactory->fNumInputs; i++) {
-            for (int j = 0; j < count / fDownSamplingFactor; j++) {
-                this->fInputs[i][j] = inputs[i][j * fDownSamplingFactor];
-            }
-        }
-
-        // Executes the 'control' block
-        this->fFBCExecutor->ExecuteBlock(this->fFactory->fComputeBlock);
-
-        // Set count in 'count' variable at the correct offset in fIntHeap
-        this->fFBCExecutor->setIntValue(this->fFactory->fCountOffset, count / fDownSamplingFactor);
-
-        // Executes the 'DSP' block
-        this->fFBCExecutor->ExecuteBlock(this->fFactory->fComputeDSPBlock);
-
-        // Upsample ouputs
-        for (int i = 0; i < this->fFactory->fNumOutputs; i++) {
-            for (int j = 0; j < count / fDownSamplingFactor; j++) {
-                T sample                                  = this->fOutputs[i][j];
-                outputs[i][j * fDownSamplingFactor]       = sample;
-                outputs[i][(j * fDownSamplingFactor) + 1] = sample;
-            }
-        }
-
-        // std::cout << "sample " << outputs[0][0] << std::endl;
     }
 };
 

@@ -1,3 +1,4 @@
+/************************** BEGIN JSONUI.h **************************/
 /************************************************************************
  FAUST Architecture File
  Copyright (C) 2003-2017 GRAME, Centre National de Creation Musicale
@@ -28,7 +29,9 @@
 #include <map>
 #include <string>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
+#include <algorithm>
 
 #include "faust/gui/UI.h"
 #include "faust/gui/PathBuilder.h"
@@ -40,7 +43,7 @@
  ******************************************************************************/
 
 template <typename REAL>
-class JSONUIAux : public PathBuilder, public Meta, public UI
+class JSONUIReal : public PathBuilder, public Meta, public UIReal<REAL>
 {
 
     protected:
@@ -56,8 +59,9 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
         std::string fFileName;
         std::string fExpandedCode;
         std::string fSHAKey;
-        std::string fDSPSize;           // In bytes
+        int fDSPSize;                   // In bytes
         std::map<std::string, int> fPathTable;
+        bool fExtended;
     
         char fCloseUIPar;
         char fCloseMetaPar;
@@ -71,6 +75,22 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
             while (n-- > 0) {
                 fout << '\t';
             }
+        }
+    
+        std::string flatten(const std::string& src)
+        {
+            std::string dst;
+            for (size_t i = 0; i < src.size(); i++) {
+                switch (src[i]) {
+                    case '\n':
+                    case '\t':
+                        break;
+                    default:
+                        dst += src[i];
+                        break;
+                }
+            }
+            return dst;
         }
     
         void addMeta(int tab_val, bool quote = true)
@@ -88,39 +108,14 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
             }
         }
     
-        std::string flatten(const std::string& src)
+        int getAddressIndex(const std::string& path)
         {
-            std::stringstream dst;
-            for (size_t i = 0; i < src.size(); i++) {
-                switch (src[i]) {
-                    case '\n':
-                    case '\t':
-                        break;
-                    // add escape for single quote
-                    case '\'':
-                        dst << "\\'";
-                        break;
-                    default:
-                        dst << src[i];
-                        break;
-                }
-            }
-            return dst.str();
-        }
-    
-        std::string getAddressIndex(const std::string& path)
-        {
-            if (fPathTable.find(path) != fPathTable.end()) {
-                std::stringstream num; num << fPathTable[path];
-                return num.str();
-            } else {
-                return "-1";
-            }
+            return (fPathTable.find(path) != fPathTable.end()) ? fPathTable[path] : -1;
         }
       
      public:
      
-        JSONUIAux(const std::string& name,
+        JSONUIReal(const std::string& name,
                   const std::string& filename,
                   int inputs,
                   int outputs,
@@ -131,28 +126,28 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
                   const std::string& compile_options,
                   const std::vector<std::string>& library_list,
                   const std::vector<std::string>& include_pathnames,
-                  const std::string& size,
+                  int size,
                   const std::map<std::string, int>& path_table)
         {
             init(name, filename, inputs, outputs, sr_index, sha_key, dsp_code, version, compile_options, library_list, include_pathnames, size, path_table);
         }
 
-        JSONUIAux(const std::string& name, const std::string& filename, int inputs, int outputs)
+        JSONUIReal(const std::string& name, const std::string& filename, int inputs, int outputs)
         {
-            init(name, filename, inputs, outputs, -1, "", "", "", "", std::vector<std::string>(), std::vector<std::string>(), "", std::map<std::string, int>());
+            init(name, filename, inputs, outputs, -1, "", "", "", "", std::vector<std::string>(), std::vector<std::string>(), -1, std::map<std::string, int>());
         }
 
-        JSONUIAux(int inputs, int outputs)
+        JSONUIReal(int inputs, int outputs)
         {
-            init("", "", inputs, outputs, -1, "", "","", "", std::vector<std::string>(), std::vector<std::string>(), "", std::map<std::string, int>());
+            init("", "", inputs, outputs, -1, "", "","", "", std::vector<std::string>(), std::vector<std::string>(), -1, std::map<std::string, int>());
         }
         
-        JSONUIAux()
+        JSONUIReal()
         {
-            init("", "", -1, -1, -1, "", "", "", "", std::vector<std::string>(), std::vector<std::string>(), "", std::map<std::string, int>());
+            init("", "", -1, -1, -1, "", "", "", "", std::vector<std::string>(), std::vector<std::string>(), -1, std::map<std::string, int>());
         }
  
-        virtual ~JSONUIAux() {}
+        virtual ~JSONUIReal() {}
         
         void setInputs(int inputs) { fInputs = inputs; }
         void setOutputs(int outputs) { fOutputs = outputs; }
@@ -171,10 +166,16 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
                   const std::string& compile_options,
                   const std::vector<std::string>& library_list,
                   const std::vector<std::string>& include_pathnames,
-                  const std::string& size,
-                  const std::map<std::string, int>& path_table)
+                  int size,
+                  const std::map<std::string, int>& path_table,
+                  bool extended = false)
         {
             fTab = 1;
+            fExtended = extended;
+            if (fExtended) {
+                fUI << std::setprecision(std::numeric_limits<REAL>::max_digits10);
+                fMeta << std::setprecision(std::numeric_limits<REAL>::max_digits10);
+            }
             
             // Start Meta generation
             fMeta.str("");
@@ -212,7 +213,7 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
             fTab += 1;
             tab(fTab, fUI); fUI << "\"type\": \"" << name << "\",";
             tab(fTab, fUI); fUI << "\"label\": \"" << label << "\",";
-            addMeta(fTab + 1);
+            addMeta(fTab);
             tab(fTab, fUI); fUI << "\"items\": [";
             fCloseUIPar = ' ';
             fTab += 1;
@@ -251,15 +252,17 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
             
             fUI << fCloseUIPar;
             tab(fTab, fUI); fUI << "{";
-            tab(fTab + 1, fUI); fUI << "\"type\": \"" << name << "\",";
-            tab(fTab + 1, fUI); fUI << "\"label\": \"" << label << "\",";
+            fTab += 1;
+            tab(fTab, fUI); fUI << "\"type\": \"" << name << "\",";
+            tab(fTab, fUI); fUI << "\"label\": \"" << label << "\",";
             if (fPathTable.size() > 0) {
-                tab(fTab + 1, fUI); fUI << "\"address\": \"" << path << "\",";
-                tab(fTab + 1, fUI); fUI << "\"index\": \"" << getAddressIndex(path) << "\"" << ((fMetaAux.size() > 0) ? "," : "");
+                tab(fTab, fUI); fUI << "\"address\": \"" << path << "\",";
+                tab(fTab, fUI); fUI << "\"index\": " << getAddressIndex(path) << ((fMetaAux.size() > 0) ? "," : "");
             } else {
-                tab(fTab + 1, fUI); fUI << "\"address\": \"" << path << "\"" << ((fMetaAux.size() > 0) ? "," : "");
+                tab(fTab, fUI); fUI << "\"address\": \"" << path << "\"" << ((fMetaAux.size() > 0) ? "," : "");
             }
-            addMeta(fTab + 1, false);
+            addMeta(fTab, false);
+            fTab -= 1;
             tab(fTab, fUI); fUI << "}";
             fCloseUIPar = ',';
         }
@@ -280,17 +283,19 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
             
             fUI << fCloseUIPar;
             tab(fTab, fUI); fUI << "{";
-            tab(fTab + 1, fUI); fUI << "\"type\": \"" << name << "\",";
-            tab(fTab + 1, fUI); fUI << "\"label\": \"" << label << "\",";
-            tab(fTab + 1, fUI); fUI << "\"address\": \"" << path << "\",";
+            fTab += 1;
+            tab(fTab, fUI); fUI << "\"type\": \"" << name << "\",";
+            tab(fTab, fUI); fUI << "\"label\": \"" << label << "\",";
+            tab(fTab, fUI); fUI << "\"address\": \"" << path << "\",";
             if (fPathTable.size() > 0) {
-                tab(fTab + 1, fUI); fUI << "\"index\": \"" << getAddressIndex(path) << "\",";
+                tab(fTab, fUI); fUI << "\"index\": " << getAddressIndex(path) << ",";
             }
-            addMeta(fTab + 1);
-            tab(fTab + 1, fUI); fUI << "\"init\": \"" << init << "\",";
-            tab(fTab + 1, fUI); fUI << "\"min\": \"" << min << "\",";
-            tab(fTab + 1, fUI); fUI << "\"max\": \"" << max << "\",";
-            tab(fTab + 1, fUI); fUI << "\"step\": \"" << step << "\"";
+            addMeta(fTab);
+            tab(fTab, fUI); fUI << "\"init\": " << init << ",";
+            tab(fTab, fUI); fUI << "\"min\": " << min << ",";
+            tab(fTab, fUI); fUI << "\"max\": " << max << ",";
+            tab(fTab, fUI); fUI << "\"step\": " << step;
+            fTab -= 1;
             tab(fTab, fUI); fUI << "}";
             fCloseUIPar = ',';
         }
@@ -318,15 +323,17 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
             
             fUI << fCloseUIPar;
             tab(fTab, fUI); fUI << "{";
-            tab(fTab + 1, fUI); fUI << "\"type\": \"" << name << "\",";
-            tab(fTab + 1, fUI); fUI << "\"label\": \"" << label << "\",";
-            tab(fTab + 1, fUI); fUI << "\"address\": \"" << path << "\",";
+            fTab += 1;
+            tab(fTab, fUI); fUI << "\"type\": \"" << name << "\",";
+            tab(fTab, fUI); fUI << "\"label\": \"" << label << "\",";
+            tab(fTab, fUI); fUI << "\"address\": \"" << path << "\",";
             if (fPathTable.size() > 0) {
-                tab(fTab + 1, fUI); fUI << "\"index\": \"" << getAddressIndex(path) << "\",";
+                tab(fTab, fUI); fUI << "\"index\": " << getAddressIndex(path) << ",";
             }
-            addMeta(fTab + 1);
-            tab(fTab + 1, fUI); fUI << "\"min\": \"" << min << "\",";
-            tab(fTab + 1, fUI); fUI << "\"max\": \"" << max << "\"";
+            addMeta(fTab);
+            tab(fTab, fUI); fUI << "\"min\": " << min << ",";
+            tab(fTab, fUI); fUI << "\"max\": " << max;
+            fTab -= 1;
             tab(fTab, fUI); fUI << "}";
             fCloseUIPar = ',';
         }
@@ -347,13 +354,15 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
             
             fUI << fCloseUIPar;
             tab(fTab, fUI); fUI << "{";
-            tab(fTab + 1, fUI); fUI << "\"type\": \"" << "soundfile" << "\",";
-            tab(fTab + 1, fUI); fUI << "\"label\": \"" << label << "\"" << ",";
-            tab(fTab + 1, fUI); fUI << "\"url\": \"" << url << "\"" << ",";
-            tab(fTab + 1, fUI); fUI << "\"address\": \"" << path << "\"" << ((fPathTable.size() > 0) ? "," : "");
+            fTab += 1;
+            tab(fTab, fUI); fUI << "\"type\": \"" << "soundfile" << "\",";
+            tab(fTab, fUI); fUI << "\"label\": \"" << label << "\"" << ",";
+            tab(fTab, fUI); fUI << "\"url\": \"" << url << "\"" << ",";
+            tab(fTab, fUI); fUI << "\"address\": \"" << path << "\"" << ((fPathTable.size() > 0) ? "," : "");
             if (fPathTable.size() > 0) {
-                tab(fTab + 1, fUI); fUI << "\"index\": \"" << getAddressIndex(path) << "\"";
+                tab(fTab, fUI); fUI << "\"index\": " << getAddressIndex(path);
             }
+            fTab -= 1;
             tab(fTab, fUI); fUI << "}";
             fCloseUIPar = ',';
         }
@@ -381,6 +390,9 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
         {
             fTab = 0;
             std::stringstream JSON;
+            if (fExtended) {
+                JSON << std::setprecision(std::numeric_limits<REAL>::max_digits10);
+            }
             JSON << "{";
             fTab += 1;
             tab(fTab, JSON); JSON << "\"name\": \"" << fName << "\",";
@@ -405,12 +417,12 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
                 }
                 JSON << "],";
             }
-            if (fDSPSize != "") { tab(fTab, JSON); JSON << "\"size\": \"" << fDSPSize << "\","; }
+            if (fDSPSize != -1) { tab(fTab, JSON); JSON << "\"size\": " << fDSPSize << ","; }
             if (fSHAKey != "") { tab(fTab, JSON); JSON << "\"sha_key\": \"" << fSHAKey << "\","; }
             if (fExpandedCode != "") { tab(fTab, JSON); JSON << "\"code\": \"" << fExpandedCode << "\","; }
-            tab(fTab, JSON); JSON << "\"inputs\": \"" << fInputs << "\","; 
-            tab(fTab, JSON); JSON << "\"outputs\": \"" << fOutputs << "\",";
-            if (fSRIndex != -1) { tab(fTab, JSON); JSON << "\"sr_index\": \"" << fSRIndex << "\","; }
+            tab(fTab, JSON); JSON << "\"inputs\": " << fInputs << ",";
+            tab(fTab, JSON); JSON << "\"outputs\": " << fOutputs << ",";
+            if (fSRIndex != -1) { tab(fTab, JSON); JSON << "\"sr_index\": " << fSRIndex << ","; }
             tab(fTab, fMeta); fMeta << "],";
             tab(fTab, fUI); fUI << "]";
             fTab -= 1;
@@ -427,44 +439,114 @@ class JSONUIAux : public PathBuilder, public Meta, public UI
 
 // Externally available class using FAUSTFLOAT
 
-class JSONUI : public JSONUIAux<FAUSTFLOAT>
+struct JSONUI : public JSONUIReal<FAUSTFLOAT>, public UI
 {
-    public :
     
-        JSONUI(const std::string& name,
-               const std::string& filename,
-               int inputs,
-               int outputs,
-               int sr_index,
-               const std::string& sha_key,
-               const std::string& dsp_code,
-               const std::string& version,
-               const std::string& compile_options,
-               const std::vector<std::string>& library_list,
-               const std::vector<std::string>& include_pathnames,
-               const std::string& size,
-               const std::map<std::string, int>& path_table):
-        JSONUIAux<FAUSTFLOAT>(name, filename,
-                              inputs, outputs,
-                              sr_index,
-                              sha_key, dsp_code,
-                              version, compile_options,
-                              library_list, include_pathnames,
-                              size, path_table)
-        {}
-        
-        JSONUI(const std::string& name, const std::string& filename, int inputs, int outputs):
-        JSONUIAux<FAUSTFLOAT>(name, filename, inputs, outputs)
-        {}
-        
-        JSONUI(int inputs, int outputs):JSONUIAux<FAUSTFLOAT>(inputs, outputs)
-        {}
-        
-        JSONUI():JSONUIAux<FAUSTFLOAT>()
-        {}
+    JSONUI(const std::string& name,
+           const std::string& filename,
+           int inputs,
+           int outputs,
+           int sr_index,
+           const std::string& sha_key,
+           const std::string& dsp_code,
+           const std::string& version,
+           const std::string& compile_options,
+           const std::vector<std::string>& library_list,
+           const std::vector<std::string>& include_pathnames,
+           int size,
+           const std::map<std::string, int>& path_table):
+    JSONUIReal<FAUSTFLOAT>(name, filename,
+                          inputs, outputs,
+                          sr_index,
+                          sha_key, dsp_code,
+                          version, compile_options,
+                          library_list, include_pathnames,
+                          size, path_table)
+    {}
     
-        virtual ~JSONUI() {}
+    JSONUI(const std::string& name, const std::string& filename, int inputs, int outputs):
+    JSONUIReal<FAUSTFLOAT>(name, filename, inputs, outputs)
+    {}
+    
+    JSONUI(int inputs, int outputs):JSONUIReal<FAUSTFLOAT>(inputs, outputs)
+    {}
+    
+    JSONUI():JSONUIReal<FAUSTFLOAT>()
+    {}
+
+    virtual void openTabBox(const char* label)
+    {
+        JSONUIReal<FAUSTFLOAT>::openTabBox(label);
+    }
+    virtual void openHorizontalBox(const char* label)
+    {
+        JSONUIReal<FAUSTFLOAT>::openHorizontalBox(label);
+    }
+    virtual void openVerticalBox(const char* label)
+    {
+        JSONUIReal<FAUSTFLOAT>::openVerticalBox(label);
+    }
+    virtual void closeBox()
+    {
+        JSONUIReal<FAUSTFLOAT>::closeBox();
+    }
+    
+    // -- active widgets
+    
+    virtual void addButton(const char* label, FAUSTFLOAT* zone)
+    {
+        JSONUIReal<FAUSTFLOAT>::addButton(label, zone);
+    }
+    virtual void addCheckButton(const char* label, FAUSTFLOAT* zone)
+    {
+        JSONUIReal<FAUSTFLOAT>::addCheckButton(label, zone);
+    }
+    virtual void addVerticalSlider(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT min, FAUSTFLOAT max, FAUSTFLOAT step)
+    {
+        JSONUIReal<FAUSTFLOAT>::addVerticalSlider(label, zone, init, min, max, step);
+    }
+    virtual void addHorizontalSlider(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT min, FAUSTFLOAT max, FAUSTFLOAT step)
+    {
+        JSONUIReal<FAUSTFLOAT>::addHorizontalSlider(label, zone, init, min, max, step);
+    }
+    virtual void addNumEntry(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT min, FAUSTFLOAT max, FAUSTFLOAT step)
+    {
+        JSONUIReal<FAUSTFLOAT>::addNumEntry(label, zone, init, min, max, step);
+    }
+    
+    // -- passive widgets
+    
+    virtual void addHorizontalBargraph(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT min, FAUSTFLOAT max)
+    {
+        JSONUIReal<FAUSTFLOAT>::addHorizontalBargraph(label, zone, min, max);
+    }
+    virtual void addVerticalBargraph(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT min, FAUSTFLOAT max)
+    {
+        JSONUIReal<FAUSTFLOAT>::addVerticalBargraph(label, zone, min, max);
+    }
+    
+    // -- soundfiles
+    
+    virtual void addSoundfile(const char* label, const char* filename, Soundfile** sf_zone)
+    {
+        JSONUIReal<FAUSTFLOAT>::addSoundfile(label, filename, sf_zone);
+    }
+    
+    // -- metadata declarations
+    
+    virtual void declare(FAUSTFLOAT* zone, const char* key, const char* val)
+    {
+        JSONUIReal<FAUSTFLOAT>::declare(zone, key, val);
+    }
+
+    virtual void declare(const char* key, const char* val)
+    {
+        JSONUIReal<FAUSTFLOAT>::declare(key, val);
+    }
+
+    virtual ~JSONUI() {}
     
 };
 
 #endif // FAUST_JSONUI_H
+/**************************  END  JSONUI.h **************************/

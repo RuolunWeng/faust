@@ -73,8 +73,14 @@ struct CheckControlUI : public GenericUI {
     
     map<FAUSTFLOAT*, FAUSTFLOAT> fControlZone;
    
-    virtual void addButton(const char* label, FAUSTFLOAT* zone) { addItem(zone, FAUSTFLOAT(0)); }
-    virtual void addCheckButton(const char* label, FAUSTFLOAT* zone) { addItem(zone, FAUSTFLOAT(0)); }
+    virtual void addButton(const char* label, FAUSTFLOAT* zone)
+    {
+        addItem(zone, FAUSTFLOAT(0));
+    }
+    virtual void addCheckButton(const char* label, FAUSTFLOAT* zone)
+    {
+        addItem(zone, FAUSTFLOAT(0));
+    }
     virtual void addVerticalSlider(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT min, FAUSTFLOAT max, FAUSTFLOAT step)
     {
         addItem(zone, init);
@@ -95,18 +101,16 @@ struct CheckControlUI : public GenericUI {
    
     bool checkDefaults()
     {
-        map<FAUSTFLOAT*, FAUSTFLOAT>::iterator it;
-        for (it = fControlZone.begin(); it != fControlZone.end(); it++) {
-            if ((*it).second != *(*it).first) return false;
+        for (auto& it : fControlZone) {
+            if (*it.first != it.second) return false;
         }
         return true;
     }
     
     void initRandom()
     {
-        map<FAUSTFLOAT*, FAUSTFLOAT>::iterator it;
-        for (it = fControlZone.begin(); it != fControlZone.end(); it++) {
-            *(*it).first = 0.123456789;
+        for (auto& it : fControlZone) {
+            *it.first = 0.123456789;
         }
     }
 };
@@ -158,7 +162,7 @@ static void runPolyDSP(dsp* dsp, int& linenum, int nbsamples, int num_voices = 4
     
     // Soundfile
     TestMemoryReader memory_reader;
-    SoundUI sound_ui("", &memory_reader);
+    SoundUI sound_ui("", -1, &memory_reader);
     DSP->setGroup(false);
     DSP->buildUserInterface(&sound_ui);
     DSP->setGroup(true);
@@ -173,26 +177,26 @@ static void runPolyDSP(dsp* dsp, int& linenum, int nbsamples, int num_voices = 4
     
     // Check getSampleRate
     if (DSP->getSampleRate() != 44100) {
-        cerr << "ERROR in getSampleRate : " << DSP->getSampleRate() << std::endl;
+        cerr << "ERROR runPolyDSP in getSampleRate : " << DSP->getSampleRate() << std::endl;
     }
     
     // Check default after 'init'
     if (!controlui.checkDefaults()) {
-        cerr << "ERROR in checkDefaults after 'init'" << std::endl;
+        cerr << "ERROR runPolyDSP in checkDefaults after 'init'" << std::endl;
     }
     
     // Check default after 'instanceResetUserInterface'
     controlui.initRandom();
     DSP->instanceResetUserInterface();
     if (!controlui.checkDefaults()) {
-        cerr << "ERROR in checkDefaults after 'instanceResetUserInterface'" << std::endl;
+        cerr << "ERROR runPolyDSP in checkDefaults after 'instanceResetUserInterface'" << std::endl;
     }
     
     // Check default after 'instanceInit'
     controlui.initRandom();
     DSP->instanceInit(44100);
     if (!controlui.checkDefaults()) {
-        cerr << "ERROR in checkDefaults after 'instanceInit'" << std::endl;
+        cerr << "ERROR runPolyDSP in checkDefaults after 'instanceInit'" << std::endl;
     }
     
     // Init again
@@ -249,7 +253,7 @@ static void runDSP(dsp* DSP, const string& file, int& linenum, int nbsamples, bo
     
     // Soundfile
     TestMemoryReader memory_reader;
-    SoundUI sound_ui("", &memory_reader);
+    SoundUI sound_ui("", -1, &memory_reader);
     DSP->buildUserInterface(&sound_ui);
     
     // Get control and then 'initRandom'
@@ -267,30 +271,36 @@ static void runDSP(dsp* DSP, const string& file, int& linenum, int nbsamples, bo
     
     // Check getSampleRate
     if (DSP->getSampleRate() != 44100) {
-        cerr << "ERROR in getSampleRate : " << DSP->getSampleRate() << std::endl;
+        cerr << "ERROR runDSP in getSampleRate : " << DSP->getSampleRate() << std::endl;
     }
     
     // Check default after 'init'
     if (!controlui.checkDefaults()) {
-        cerr << "ERROR in checkDefaults after 'init'" << std::endl;
+        cerr << "ERROR runDSP in checkDefaults after 'init'" << std::endl;
     }
     
     // Check default after 'instanceResetUserInterface'
     controlui.initRandom();
     DSP->instanceResetUserInterface();
     if (!controlui.checkDefaults()) {
-        cerr << "ERROR in checkDefaults after 'instanceResetUserInterface'" << std::endl;
+        cerr << "ERROR runDSP in checkDefaults after 'instanceResetUserInterface'" << std::endl;
     }
     
     // Check default after 'instanceInit'
     controlui.initRandom();
     DSP->instanceInit(44100);
     if (!controlui.checkDefaults()) {
-        cerr << "ERROR in checkDefaults after 'instanceInit'" << std::endl;
+        cerr << "ERROR runDSP in checkDefaults after 'instanceInit'" << std::endl;
     }
     
-    // Init again
-    DSP->init(44100);
+    // To test that instanceInit properly init a cloned DSP
+    DSP = DSP->clone();
+    DSP->instanceInit(44100);
+    
+    // Init UIs on cloned DSP
+    DSP->buildUserInterface(&finterface);
+    DSP->buildUserInterface(&sound_ui);
+    DSP->buildUserInterface(&midi_ui);
     
     int nins = DSP->getNumInputs();
     int nouts = DSP->getNumOutputs();
@@ -309,7 +319,7 @@ static void runDSP(dsp* DSP, const string& file, int& linenum, int nbsamples, bo
         handler.handleData2(0, midi::MidiStatus::MIDI_POLY_AFTERTOUCH, 0, i, 75);
         handler.handleData2(0, midi::MidiStatus::MIDI_NOTE_ON, 0, i, 75);
         handler.handleData2(0, midi::MidiStatus::MIDI_NOTE_OFF, 0, i, 75);
-        handler.handleData2(0, midi::MidiStatus::MIDI_PITCH_BEND, 0, i, 1000);
+        handler.handleData2(0, midi::MidiStatus::MIDI_PITCH_BEND, 0, i, 4000);
     }
     handler.handleData1(0, midi::MidiStatus::MIDI_PROGRAM_CHANGE, 0, 10);
     handler.handleData1(0, midi::MidiStatus::MIDI_AFTERTOUCH, 0, 10);
@@ -334,12 +344,9 @@ static void runDSP(dsp* DSP, const string& file, int& linenum, int nbsamples, bo
                 int randval = rand();
                 int n1 = randval % nFrames;
                 int n2 = nFrames - n1;
-                //std::cerr << "randval " << randval << " nFrames " << nFrames << " linenum " << linenum << " n1 = " << n1 << " n2 = " << n2 << std::endl;
-                
                 DSP->compute(n1, ichan->buffers(), ochan->buffers());
                 DSP->compute(n2, ichan->buffers(n1), ochan->buffers(n1));
             } else {
-                //std::cerr << "nFrames = " << nFrames << std::endl;
                 DSP->compute(nFrames, ichan->buffers(), ochan->buffers());
             }
            

@@ -26,8 +26,6 @@
 
 #include "was_instructions.hh"
 
-using namespace std;
-
 #define realStr ((gGlobal->gFloatSize == 1) ? "f32" : ((gGlobal->gFloatSize == 2) ? "f64" : ""))
 #define offStr ((gGlobal->gFloatSize == 1) ? "2" : ((gGlobal->gFloatSize == 2) ? "3" : ""))
 
@@ -56,7 +54,7 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
                 dot = true;
                 break;
             } else if (str[i] == 'e') {
-                e_pos = i;
+                e_pos = int(i);
                 break;
             }
         }
@@ -79,9 +77,13 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
     template <class T>
     string checkReal(T val)
     {
-        std::stringstream num;
-        num << std::setprecision(std::numeric_limits<T>::max_digits10) << val;
-        return ensureFloat(num.str());
+        if (std::isinf(val)) {
+            return "inf";
+        } else {
+            std::stringstream num;
+            num << setprecision(numeric_limits<T>::max_digits10) << val;
+            return ensureFloat(num.str());
+        }
     }
 
    public:
@@ -148,7 +150,7 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
             if (i < size - 1) *fOut << " ";
         }
         if (inst->fType->getType() != Typed::kVoid) {
-            *fOut << " (result " << type2String(inst->fType->getType()) << ")";
+            *fOut << " (result " << type2String(inst->getResType()) << ")";
         }
     }
 
@@ -199,10 +201,10 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
                 }
 
                 for (int i = 0; i < desc.fArgs; i++) {
-                    *fOut << (isIntType(desc.fType) ? "i32" : realStr);
+                    *fOut << type2String(desc.fType);
                     if (i < desc.fArgs - 1) *fOut << " ";
                 }
-                *fOut << ") (result " << (isIntType(desc.fType) ? "i32" : realStr) << "))";
+                *fOut << ") (result " << type2String(desc.fType) << "))";
                 return;
             }
         }
@@ -221,11 +223,13 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
     virtual void visit(LoadVarInst* inst)
     {
         fTypingVisitor.visit(inst);
-        Typed::VarType      type   = fTypingVisitor.fCurType;
+        Typed::VarType        type = fTypingVisitor.fCurType;
         Address::AccessType access = inst->fAddress->getAccess();
+        string                name = inst->fAddress->getName();
+        IndexedAddress*    indexed =  dynamic_cast<IndexedAddress*>(inst->fAddress);
 
-        if (access & Address::kStruct || access & Address::kStaticStruct ||
-            dynamic_cast<IndexedAddress*>(inst->fAddress)) {
+        if (access & Address::kStruct || access & Address::kStaticStruct || indexed) {
+            
             int offset;
             if ((offset = getConstantOffset(inst->fAddress)) > 0) {
                 if (isRealType(type)) {
@@ -243,8 +247,9 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
                 inst->fAddress->accept(this);
                 *fOut << ")";
             }
+        
         } else {
-            *fOut << "(local.get $" << inst->fAddress->getName() << ")";
+            *fOut << "(local.get $" << name << ")";
         }
     }
 
@@ -390,8 +395,15 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
                 // Local variable
                 Int32NumInst* num;
                 if ((num = dynamic_cast<Int32NumInst*>(indexed->fIndex))) {
-                    *fOut << "(i32.add (local.get " << indexed->getName() << ") (i32.const " << (num->fNum << offStrNum)
-                          << "))";
+                    // Hack for 'soundfile'
+                    DeclareStructTypeInst* struct_type = isStructType(indexed->getName());
+                    *fOut << "(i32.add (local.get " << indexed->getName();
+                    if (struct_type) {
+                        *fOut << ") (i32.const " << struct_type->fType->getOffset(num->fNum);
+                    } else {
+                        *fOut << ") (i32.const " << (num->fNum << offStrNum);
+                    }
+                    *fOut << "))";
                 } else {
                     *fOut << "(i32.add (local.get " << indexed->getName() << ") (i32.shl ";
                     indexed->fIndex->accept(this);
@@ -400,7 +412,7 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
             }
         }
     }
-
+  
     virtual void visit(LoadVarAddressInst* inst)
     {
         // Not implemented in WASM
@@ -588,8 +600,9 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
         generateFunCallArgs(inst->fArgs.begin(), inst->fArgs.end(), (int)inst->fArgs.size());
         *fOut << ")";
     }
-
-    // Conditional : select
+    
+    /*
+    // Select that computes both branches
     virtual void visit(Select2Inst* inst)
     {
         *fOut << "(select ";
@@ -609,7 +622,38 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
             inst->fCond->accept(this);
         }
         *fOut << ")";
+        
+        fTypingVisitor.visit(inst);
+    }
+    */
 
+    // Select that only computes one branch
+    virtual void visit(Select2Inst* inst)
+    {
+        *fOut << "(if ";
+        // Result type
+        inst->fThen->accept(&fTypingVisitor);
+        *fOut << "(result " << type2String(fTypingVisitor.fCurType) << ") ";
+        
+        // Compile 'cond'
+        inst->fCond->accept(&fTypingVisitor);
+        // Possibly convert i64 to i32
+        if (isIntType64(fTypingVisitor.fCurType)) {
+            // Compare to 0
+            *fOut << "(i64.ne ";
+            inst->fCond->accept(this);
+            *fOut << "(i64.const 0))";
+        } else {
+            inst->fCond->accept(this);
+        }
+        // Compile 'then'
+        *fOut << " ";
+        inst->fThen->accept(this);
+        // Compile 'else'
+        *fOut << " ";
+        inst->fElse->accept(this);
+        *fOut << ")";
+        
         fTypingVisitor.visit(inst);
     }
 
@@ -673,7 +717,7 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
         tab(fTab, *fOut);
 
         fTab--;
-        tab(fTab, *fOut);
+        back(1, *fOut);
         *fOut << ")";
         fTab--;
         tab(fTab, *fOut);
@@ -681,11 +725,6 @@ class WASTInstVisitor : public TextInstVisitor, public WASInst {
         tab(fTab, *fOut);
     }
 
-    virtual void visit(AddSoundfileInst* inst)
-    {
-        // Not supported for now
-        throw faustexception("ERROR : AddSoundfileInst not supported for wast\n");
-    }
 };
 
 #endif

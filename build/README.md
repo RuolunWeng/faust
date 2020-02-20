@@ -2,7 +2,7 @@
 # How to compile
 
 ### Prerequisites
-- you must have [cmake](https://cmake.org/) version 3.4.0 or greater installed.
+- you must have [cmake](https://cmake.org/) version 3.7.2 or greater installed.
 - you must have [LLVM](http://llvm.org/) version 3.8 or greater installed to compile the llvm backend.
 - you must have [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) installed to compile the http library.
 - on Windows, you have the option to use MS [Visual Studio](http://www.microsoft.com/express/) or the [MSYS2](http://www.msys2.org/) environment. The current Makefile is targetting MSYS2 by default. See Windows specific notes.
@@ -11,9 +11,9 @@
 ## About cmake projects
 
 Build of Faust components is cmake based. Cmake is highly state dependant since it maintains a cache with the various settings of the project. The compilation process takes place in 2 phases:
-- 1) **project generation** : this is the step where you choose what you want to include in your project and to compile in a second step. The faust compiler, the OSC and HTTP libraries are included by default but you can add (or remove) the faust libraries (static or dynamic versions). You can also choose the form of your project : a Makefile, an Xcode or Visual Studio project, or any of the generator provided by cmake on your platform. You may think of this step as the definition of the targets that will be available from your project. Note that at this step, you also choose the faust backends you want to include in the different components (compiler and faust libraries). See the backends section for more details.
+- 1) **project generation**: this is the step where you choose what you want to include in your project and to compile in a second step. The faust compiler, the OSC and HTTP libraries are included by default but you can add (or remove) the faust libraries (static or dynamic versions). You can also choose the form of your project: a Makefile, an Xcode or Visual Studio project, or any of the generator provided by cmake on your platform. You may think of this step as the definition of the targets that will be available from your project. Note that at this step, you also choose the faust backends you want to include in the different components (compiler and faust libraries). See the backends section for more details.
 
-- 2) **compilation of the project** : once your project is generated, the default is to compile all the targets that are included. But single targets are still available and can be compiled individually. Note that your project will always include an `install` target, which always installs all the components included in the project.
+- 2) **compilation of the project**: once your project is generated, the default is to compile all the targets that are included. But single targets are still available and can be compiled individually. Note that your project will always include an `install` target, which always installs all the components included in the project.
 
 These 2 phases are independent and it's possible to modify the project at any time.
 If you're familiar with cmake, you can directly use cmake commands otherwise, a Makefile is provided that includes and demonstrates all the project options.
@@ -26,7 +26,7 @@ The Makefile includes 2 kind of targets, addressing the 2 phases of the compilat
 By default, you can simply type `make` in the `build` folder to compile the **Faust** compiler and the **OSC and HTTP** libraries.
 On output, you'll find applications in the `build/bin` folder and libraries in the `build/lib` folder.
 
-Type `make help` for details on targets and options.
+**Type `make help` for details on targets and options.**
 
 ## Customizing the embedded backends
 The `backends` folder contains a set of files describing the Faust backends to be embedded into  each possible output (compiler, static library, dynamic library). By default, the project makes use of `backends.cmake`.
@@ -35,7 +35,6 @@ You can freely customize this file to your needs or create a new one. A `BACKEND
 ## Customizing the project targets
 The `targets` folder contains a set of files describing the targets to be embedded into your ptoject. By default, the project includes the faust, osc and http targets, corresponding to the faust compiler, the osc and the httpd static libraries.
 You can freely customize this file to your needs or create a new one. A `TARGETS` option is provided by the Makefile to use any file (note it always look for the targets files into the targets folder). At cmake level, use of the `-C targets_file.cmake` will populate the cmake cache with the correponding settings.
-
 
 ## Advanced settings with cmake
 
@@ -48,6 +47,35 @@ You can directly invoke `cmake` with the appropriate options. In this case, it i
 You can have a look at the `Makefile` for examples of cmake invocations and at the `CMakeLists.txt` file for the available cmake options.
 
 **Warning**: running cmake from the build folder may override the existing Makefile.
+
+
+## Installing on Linux
+
+The default install directory is `/usr/local`:
+
+`> sudo make install`  
+
+#### Custom installation
+
+To install in another folder:
+
+`> make install PREFIX=/your_folder/folder`  
+
+
+#### Faust libraries location
+By default, all faust libraries are installed in a `lib` folder.
+Some system may require to have the 64 bits libraries installed in a `lib64` folder.
+To specify another destination folder for libraries, use the LIBSDIR option e.g.:
+
+`> make LIBSDIR=lib64`  
+
+or when your project is already generated:
+
+`> make cmake LIBSDIR=lib64`  
+
+
+**WARNING**: all the compilation chain must be aware of the libraries destination folder. Indeed, `faust --libdir` must give the correct location.
+
 
 ## Compiling on Windows
 #### Using MSYS2
@@ -65,7 +93,7 @@ Then you can open the Visual Studio solution located in `your_output_folder` or 
 
 `> cmake --build .`  
 
-If `make` is available from your commands prompt, you can get similar results with the following options :
+If `make` is available from your commands prompt, you can get similar results with the following options:
 
 `> make  GENERATOR="Visual Studio 14 2015 Win64"`
 
@@ -74,10 +102,24 @@ Read the MSVC [specific note](README-MSVC.md) for more details.
 ## Notes regarding the backends compilation
 
 ### Notes regarding LLVM
+
 - you must have `llvm-config` available from the command line.
 - LLVM supported versions starts at 3.8, older versions may work but are not supported anymore.
 - using LLVM 5.0.0 works on every platform, you can get binary distributions from the [LLVM Releases page](http://releases.llvm.org/)
 - using a previous LLVM version: you have to make sure that it is compiled **with rtti**. You can check using `llvm-config --has-rtti`
+
+
+#### LLVM on macOS:
+
+##### Using Macports:
+
+- you can use [macports](https://www.macports.org/) to install the LLVM package.
+- use `sudo port select llvm mp-llvm-XX` to activate a given version of LLVM (like `sudo port select llvm mp-llvm-9.0`).
+- you can check that llvm-config is found doing `llvm-config --version`.
+
+##### Using Homebrew:
+
+- look at [Homebrew](https://brew.sh/index_fr). Note that brew does not seem to properly install `llvm-config`, so you may have to follow the section [Potential issues with llvm-config](#potential-issues-with-llvm-config).
 
 
 #### LLVM on windows:
@@ -101,7 +143,7 @@ If `llvm-config` is available under a version name (e.g. llvm-config-5.0.0) you 
 > cd faustdir &&
 cmake .. -DLLVM_CONFIG=llvm-config-5.0.0
 
-When the project generation fails to configure LLVM, you can try using the cmake llvm-config file (if available). To do so :
+When the project generation fails to configure LLVM, you can try using the cmake llvm-config file (if available). To do so:
 > cd faustdir &&
 cmake .. -DUSE_LLVM_CONFIG=off
 

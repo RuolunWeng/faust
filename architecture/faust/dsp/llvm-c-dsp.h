@@ -1,3 +1,4 @@
+/************************** BEGIN llvm-c-dsp.h **************************/
 /************************************************************************
  ************************************************************************
  Copyright (C) 2003-2017 GRAME, Centre National de Creation Musicale
@@ -425,7 +426,7 @@ extern "C"
     void computeCDSPInstance(llvm_dsp* dsp, int count, FAUSTFLOAT** input, FAUSTFLOAT** output);
     
     /* Set custom memory manager to be used when creating instances */
-    void setCMemoryManager(llvm_dsp_factory* factory, ManagerGlue* manager);
+    void setCMemoryManager(llvm_dsp_factory* factory, MemoryManagerGlue* manager);
     
     /**
      * Create a Faust DSP instance.
@@ -452,3 +453,4 @@ extern "C"
  */
  
 #endif
+/**************************  END  llvm-c-dsp.h **************************/

@@ -87,28 +87,28 @@ string VectorCompiler::CS(Tree sig)
 
         if (fClass->getLoopProperty(sig, ls)) {
             // sig has a loop property
-            // cerr << "CASE SH : fBackwardLoopDependencies.insert : " << tl << " --depend(A)son--> " << ls << endl;
+            //cerr << "CASE SH : fBackwardLoopDependencies.insert : " << tl << " --depend(A)son--> " << ls << endl;
             tl->fBackwardLoopDependencies.insert(ls);
 
         } else if (isSigFixDelay(sig, x, d) && fClass->getLoopProperty(x, ls)) {
-            // cerr << "CASE DL : fBackwardLoopDependencies.insert : " << tl << " --depend(B)son--> " << ls << endl;
+            //cerr << "CASE DL : fBackwardLoopDependencies.insert : " << tl << " --depend(B)son--> " << ls << endl;
             tl->fBackwardLoopDependencies.insert(ls);
 
         } else if (isSigFixDelay(sig, x, d) && isProj(x, &i, r) && fClass->getLoopProperty(r, ls)) {
-            // cerr << "CASE DR : fBackwardLoopDependencies.insert : " << tl << " --depend(B)son--> " << ls << endl;
+            //cerr << "CASE DR : fBackwardLoopDependencies.insert : " << tl << " --depend(B)son--> " << ls << endl;
             tl->fBackwardLoopDependencies.insert(ls);
 
         } else if (isProj(sig, &i, r) && fClass->getLoopProperty(r, ls)) {
-            // cerr << "CASE R* : fBackwardLoopDependencies.insert : " << tl << " --depend(B)son--> " << ls << endl;
+            //cerr << "CASE R* : fBackwardLoopDependencies.insert : " << tl << " --depend(B)son--> " << ls << endl;
             tl->fBackwardLoopDependencies.insert(ls);
 
         } else {
             if (isProj(sig, &i, r)) {
-                // cerr << "SYMBOL RECURSIF EN COURS ??? " << *r << endl;
+                //cerr << "SYMBOL RECURSIF EN COURS ??? " << *r << endl;
             } else if (getCertifiedSigType(sig)->variability() < kSamp) {
-                // cerr << "SLOW EXPRESSION " << endl;
+                //cerr << "SLOW EXPRESSION " << endl;
             } else {
-                // cerr << "Expression absorbée" << *sig << endl;
+                //cerr << "Expression absorbée" << *sig << endl;
             }
         }
     }
@@ -170,6 +170,7 @@ string VectorCompiler::generateLoopCode(Tree sig)
     int   i;
     Tree  x;
     Loop* l;
+    Loop* l2;
 
     l = fClass->topLoop();
     faustassert(l);
@@ -181,6 +182,10 @@ string VectorCompiler::generateLoopCode(Tree sig)
             if (l->hasRecDependencyIn(singleton(x))) {
                 // x is already in the loop stack
                 return ScalarCompiler::generateCode(sig);
+            } else if (fClass->getLoopProperty(x, l2)) {
+                string c = ScalarCompiler::generateCode(sig);
+                // cerr << "SPECIAL CASE TO PREVENT VECTOR BUG " << *sig << endl;
+                return c;
             } else {
                 // x must be defined
                 fClass->openLoop(x, "count");
@@ -241,19 +246,27 @@ string VectorCompiler::generateCacheCode(Tree sig, const string& exp)
         // sample-rate signal
         if (d > 0) {
             // used delayed : we need a delay line
+            //cerr << "CHASING BUG 1 " << *sig << endl;
+            //cerr << "CHASING BUG T " << getCertifiedSigType(sig) << endl;
             getTypedNames(getCertifiedSigType(sig), "Yec", ctype, vname);
+            //cerr << "CHASING BUG N " << ctype << " " << vname << endl;
             generateDelayLine(ctype, vname, d, exp, getConditionCode(sig));
             setVectorNameProperty(sig, vname);
 
             if (verySimple(sig)) {
+                //cerr << "CHASING BUG 2 " << exp << endl;
                 return exp;
             } else {
                 if (d < gGlobal->gMaxCopyDelay) {
-                    return subst("$0[i]", vname);
+                    string sss = subst("$0[i]", vname);
+                    //cerr << "CHASING BUG 3 " << sss << endl;
+                    return sss;
                 } else {
                     // we use a ring buffer
                     string mask = T(pow2limit(d + gGlobal->gVecSize) - 1);
-                    return subst("$0[($0_idx+i) & $1]", vname, mask);
+                    string sss  = subst("$0[($0_idx+i) & $1]", vname, mask);
+                    //cerr << "CHASING BUG 4 " << sss << endl;
+                    return sss;
                 }
             }
         } else {

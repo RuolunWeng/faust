@@ -1,8 +1,7 @@
 /************************************************************************
- 
  IMPORTANT NOTE : this file contains two clearly delimited sections :
- the ARCHITECTURE section (in two parts) and the USER section. Each
- section is governed by its own copyright and license. Please check individually
+ the ARCHITECTURE section (in two parts) and the USER section. Each section
+ is governed by its own copyright and license. Please check individually
  each section for license and copyright information.
  *************************************************************************/
 
@@ -10,7 +9,7 @@
 
 /************************************************************************
  FAUST Architecture File
- Copyright (C) 2003-2011 GRAME, Centre National de Creation Musicale
+ Copyright (C) 2003-2019 GRAME, Centre National de Creation Musicale
  ---------------------------------------------------------------------
  This Architecture section is free software; you can redistribute it
  and/or modify it under the terms of the GNU General Public License
@@ -50,6 +49,10 @@
 #include "faust/gui/console.h"
 #include "faust/misc.h"
 
+#ifdef SOUNDFILE
+#include "faust/gui/SoundUI.h"
+#endif
+
 using namespace std;
 
 /******************************************************************************
@@ -78,11 +81,13 @@ mydsp DSP;
 
 int main(int argc, char* argv[])
 {
-    FAUSTFLOAT fnbsamples;
+    FAUSTFLOAT nb_samples;
+    FAUSTFLOAT sample_rate;
     
     CMDUI* interface = new CMDUI(argc, argv);
     DSP.buildUserInterface(interface);
-    interface->addOption("-n", &fnbsamples, 4*1024, 0.0, 100000000.0);
+    interface->addOption("-n", &nb_samples, 4096.0, 0.0, 100000000.0);
+    interface->addOption("-sr", &sample_rate, 44100.0, 0.0, 192000.0);
     
     if (DSP.getNumInputs() > 0)
     {
@@ -90,12 +95,18 @@ int main(int argc, char* argv[])
         exit(1);
     }
     
-    // init signal processor and the user interface values
-    DSP.init(44100);
-    
     // modify the UI values according to the command line options
     interface->process_init();
     
+    // init DSP with SR
+    DSP.init(sample_rate);
+    
+#ifdef SOUNDFILE
+    SoundUI soundinterface;
+    DSP.buildUserInterface(&soundinterface);
+#endif
+    
+    // init signal processor and the user interface values
     int nouts = DSP.getNumOutputs();
     channels chan(kFrames, nouts);
     
@@ -108,7 +119,7 @@ int main(int argc, char* argv[])
     }
     cout << endl;
     
-    int nbsamples = int(fnbsamples);
+    int nbsamples = int(nb_samples);
     cout << setprecision(numeric_limits<FAUSTFLOAT>::max_digits10);
     
     while (nbsamples > kFrames)
@@ -140,4 +151,6 @@ int main(int argc, char* argv[])
     }
     return 0;
 }
+
 /********************END ARCHITECTURE SECTION (part 2/2)****************/
+

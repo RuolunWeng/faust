@@ -35,8 +35,8 @@
 #endif
 */
 
-#include "faust/dsp/dsp-optimizer.h"
 #include "faust/audio/jack-dsp.h"
+#include "faust/dsp/dsp-optimizer.h"
 #include "faust/dsp/llvm-dsp.h"
 #include "faust/dsp/interpreter-dsp.h"
 #include "faust/dsp/dsp-adapter.h"
@@ -77,7 +77,16 @@ struct malloc_memory_manager : public dsp_memory_manager {
 static void printList(const vector<string>& list)
 {
     for (int i = 0; i < list.size(); i++) {
-        std::cout << "item: " << list[i] << "\n";
+        cout << "item: " << list[i] << "\n";
+    }
+}
+
+static void splitTarget(const string& target, string& triple, string& cpu)
+{
+    size_t pos1 = target.find_first_of(':');
+    triple = target.substr(0, pos1);
+    if (pos1 != string::npos) {
+        cpu = target.substr(pos1 + 1);
     }
 }
 
@@ -87,28 +96,35 @@ int main(int argc, char* argv[])
     char filename[256];
     char rcfilename[256];
     char* home = getenv("HOME");
+    int nvoices = 0;
+    bool midi_sync = false;
     
     snprintf(name, 255, "%s", basename(argv[0]));
     snprintf(filename, 255, "%s", basename(argv[argc-1]));
     snprintf(rcfilename, 255, "%s/.%s-%src", home, name, filename);
-    
+  
     bool is_llvm = isopt(argv, "-llvm");
     bool is_interp = isopt(argv, "-interp");
     bool is_midi = isopt(argv, "-midi");
     bool is_osc = isopt(argv, "-osc");
+    bool is_all = isopt(argv, "-all");
+    bool is_generic = isopt(argv, "-generic");
     bool is_httpd = isopt(argv, "-httpd");
-    int nvoices = lopt(argv, "-nvoices", -1);
+    bool is_resample = isopt(argv, "-resample");
     
     malloc_memory_manager manager;
     
     if (isopt(argv, "-h") || isopt(argv, "-help") || (!is_llvm && !is_interp)) {
-        cout << "dynamic-jack-gtk [-llvm|interp] [-nvoices <num>] [-midi] [-osc] [-httpd] [additional Faust options (-vec -vs 8...)] foo.dsp/foo.fbc/foo.ll/foo.bc/foo.mc" << endl;
+        cout << "dynamic-jack-gtk [-llvm|interp] [-generic] [-nvoices <num>] [-all] [-midi] [-osc] [-httpd] [-resample] [additional Faust options (-vec -vs 8...)] foo.dsp/foo.fbc/foo.ll/foo.bc/foo.mc" << endl;
         cout << "Use '-llvm' to use LLVM backend\n";
         cout << "Use '-interp' to use Interpreter backend (using either .dsp or .fbc (Faust Byte Code) files\n";
+        cout << "Use '-generic' to JIT for a generic CPU (otherwise 'native' mode is used)\n";
         cout << "Use '-nvoices <num>' to produce a polyphonic self-contained DSP with <num> voices, ready to be used with MIDI or OSC\n";
+        cout << "Use '-all' to active the 'all voices always playing' mode\n";
         cout << "Use '-midi' to activate MIDI control\n";
         cout << "Use '-osc' to activate OSC control\n";
         cout << "Use '-httpd' to activate HTTP control\n";
+        cout << "Use '-resample' to resample soundfiles to the audio driver sample rate\n";
         exit(EXIT_FAILURE);
     }
     
@@ -130,9 +146,12 @@ int main(int argc, char* argv[])
     for (int i = 1; i < argc-1; i++) {
         if ((string(argv[i]) == "-llvm")
             || (string(argv[i]) == "-interp")
+            || (string(argv[i]) == "-generic")
             || (string(argv[i]) == "-midi")
             || (string(argv[i]) == "-osc")
-            || (string(argv[i]) == "-httpd")) {
+            || (string(argv[i]) == "-all")
+            || (string(argv[i]) == "-httpd")
+            || (string(argv[i]) == "-resample")) {
             continue;
         } else if (string(argv[i]) == "-nvoices") {
             i++;
@@ -142,29 +161,38 @@ int main(int argc, char* argv[])
         cout << argv[i] << " ";
     }
     cout << endl;
-    
     argv1[argc1] = nullptr;  // NULL terminated argv
     
     if (is_llvm) {
-        cout << "Using LLVM backend" << endl;
+        
+        string opt_target;
+        if (is_generic) {
+            string triple, cpu;
+            splitTarget(getDSPMachineTarget(), triple, cpu);
+            opt_target = triple + ":generic";
+            cout << "Using LLVM backend in 'generic' mode\n";
+        } else {
+            cout << "Using LLVM backend in 'native' mode\n";
+        }
+        
         // argc : without the filename (last element);
-        factory = createDSPFactoryFromFile(argv[argc-1], argc1, argv1, "", error_msg, -1);
+        factory = createDSPFactoryFromFile(argv[argc-1], argc1, argv1, opt_target, error_msg, -1);
         
         if (!factory) {
-            cerr << "Cannot create factory : " << error_msg;
+            cerr << error_msg;
             cout << "Trying to use readDSPFactoryFromIRFile..." << endl;
             factory = readDSPFactoryFromIRFile(argv[argc-1], "", error_msg, -1);
         }
         
         if (!factory) {
-            cerr << "Cannot create factory : " << error_msg;
+            cerr << error_msg;
             cout << "Trying to use readDSPFactoryFromIRFile..." << endl;
             factory = readDSPFactoryFromBitcodeFile(argv[argc-1], "", error_msg, -1);
         }
         
         
         if (!factory) {
-            cerr << "Cannot create factory : " << error_msg;
+            cerr << error_msg;
             cout << "Trying to use readDSPFactoryFromMachineFile..." << endl;
             factory = readDSPFactoryFromMachineFile(argv[argc-1], "", error_msg);
         }
@@ -191,14 +219,14 @@ int main(int argc, char* argv[])
         factory = createInterpreterDSPFactoryFromFile(argv[argc-1], argc1, argv1, error_msg);
         
         if (!factory) {
-            cerr << "Cannot create factory : " << error_msg;
+            cerr << error_msg;
             cout << "Trying to use createInterpreterDSPFactoryFromFile..." << endl;
             factory = readInterpreterDSPFactoryFromBitcodeFile(argv[argc-1], error_msg);
         }
     }
     
     if (!factory) {
-        cerr << "Cannot create factory : " << error_msg;
+        cerr << error_msg;
         exit(EXIT_FAILURE);
     }
     
@@ -231,15 +259,18 @@ int main(int argc, char* argv[])
     cout << "getName " << factory->getName() << endl;
     cout << "getSHAKey " << factory->getSHAKey() << endl;
     
-    //exit(1);
-  
+    // Before reading the -nvoices parameter
+    MidiMeta::analyse(DSP, midi_sync, nvoices);
+    nvoices = lopt(argv, "-nvoices", nvoices);
+   
     if (nvoices > 0) {
-        cout << "Starting polyphonic mode nvoices : " << nvoices << endl;
-        DSP = dsp_poly = new mydsp_poly(DSP, nvoices, true, true);
+        cout << "Starting polyphonic mode 'nvoices' : " << nvoices << " and 'all' : " << is_all << endl;
+        DSP = dsp_poly = new mydsp_poly(DSP, nvoices, !is_all, true);
     }
     
     if (isopt(argv, "-double")) {
         cout << "Running in double..." << endl;
+        DSP = new dsp_sample_adapter<double, float>(DSP);
     }
    
     GUI* interface = new GTKUI(filename, &argc, &argv);
@@ -248,15 +279,21 @@ int main(int argc, char* argv[])
     FUI* finterface = new FUI();
     DSP->buildUserInterface(finterface);
     
-    SoundUI* soundinterface = new SoundUI();
+    if (!audio.init(filename, DSP)) {
+        exit(EXIT_FAILURE);
+    }
+    
+    // After audio init to get SR
+    SoundUI* soundinterface = nullptr;
+    if (is_resample) {
+        soundinterface = new SoundUI("", audio.getSampleRate());
+    } else {
+        soundinterface = new SoundUI();
+    }
     // SoundUI has to be dispatched on all internal voices
     if (dsp_poly) dsp_poly->setGroup(false);
     DSP->buildUserInterface(soundinterface);
     if (dsp_poly) dsp_poly->setGroup(true);
-    
-    if (!audio.init(filename, DSP)) {
-        exit(EXIT_FAILURE);
-    }
    
     if (is_httpd) {
         httpdinterface = new httpdUI(name, DSP->getNumInputs(), DSP->getNumOutputs(), argc, argv);

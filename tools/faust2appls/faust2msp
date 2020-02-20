@@ -66,7 +66,7 @@ createInfoPList() {
 # existing *.dsp files          -> FILES
 #
 
-#PHASE 2 : dispatch command arguments
+# dispatch command arguments
 while [ $1 ]
 do
     p=$1
@@ -81,18 +81,8 @@ do
         echo "Use '-soundfile' when compiling DSP using 'soundfile' primitive, to add needed resources"
         exit
     fi
-
-    if [ "$p" = -omp ]; then
-        if [[ $CXX == "icpc" ]]; then
-            OMP="-openmp"
-        else
-            OMP="-fopenmp"
-        fi
-    fi
-  
-    if [ "$p" = -icc ]; then
-    	ignore=" "
-    elif [ $p = "-nvoices" ]; then
+	
+	if [ $p = "-nvoices" ]; then
         shift
         NVOICES=$1
         if [ $NVOICES -ge 0 ]; then
@@ -166,7 +156,7 @@ for p in $FILES; do
     (
         cd "$TMP"
         install -d "${f%.dsp}$EXT/Contents/MacOS"
-        $CC $CXXFLAGS -mmacosx-version-min=10.9 -Wfatal-errors -framework Carbon $POLYDEFS $MIDIDEFS $SOUNDFILEDEFS $OSCDEFS -I ../../ -I$MAXINC -I$MSPINC  -F$MAXINC -F$MSPINC -framework MaxAPI -framework MaxAudioAPI $SOUNDFILELIBS $OSCLIBS -arch i386 -Wl,-Y,1455 -bundle "${f%.dsp}.cpp" -o "${f%.dsp}$EXT/Contents/MacOS/${f%.dsp}~"
+        $CXX $CXXFLAGS -mmacosx-version-min=10.9 -Wfatal-errors -framework Carbon $POLYDEFS $MIDIDEFS $SOUNDFILEDEFS $OSCDEFS -I ../../ -I$MAXINC -I$MSPINC  -F$MAXINC -F$MSPINC -framework MaxAPI -framework MaxAudioAPI $SOUNDFILELIBS $OSCLIBS -arch i386 -Wl,-Y,1455 -bundle "${f%.dsp}.cpp" -o "${f%.dsp}$EXT/Contents/MacOS/${f%.dsp}~"
 	) >/dev/null  || exit
 
     rm -rf "$SRCDIR/${f%.dsp}$EXT"

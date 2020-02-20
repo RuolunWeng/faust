@@ -1,41 +1,39 @@
-#/************************************************************************
-
-  IMPORTANT NOTE : this file contains two clearly delimited sections :
-  the ARCHITECTURE section (in two parts) and the USER section. Each section
-  is governed by its own copyright and license. Please check individually
-  each section for license and copyright information.
-*************************************************************************/
+/************************************************************************
+ IMPORTANT NOTE : this file contains two clearly delimited sections :
+ the ARCHITECTURE section (in two parts) and the USER section. Each section
+ is governed by its own copyright and license. Please check individually
+ each section for license and copyright information.
+ *************************************************************************/
 
 /*******************BEGIN ARCHITECTURE SECTION (part 1/2)****************/
 
 /************************************************************************
-
-  Bela FAUST Architecture file
-  Oli Larkin 2016
-  www.olilarkin.co.uk
-  Based on owl.cpp
-
-  FAUST Architecture File
-  Copyright (C) 2003-2014 GRAME, Centre National de Creation Musicale
-  ---------------------------------------------------------------------
-  This Architecture section is free software; you can redistribute it
-  and/or modify it under the terms of the GNU General Public License
-  as published by the Free Software Foundation; either version 3 of
-  the License, or (at your option) any later version.
-
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program; If not, see <http://www.gnu.org/licenses/>.
-
-  EXCEPTION : As a special exception, you may create a larger work
-  that contains this FAUST architecture section and distribute
-  that work under terms of your choice, so long as this FAUST
-  architecture section is not modified.
-
+ Bela FAUST Architecture file
+ Oli Larkin 2016
+ www.olilarkin.co.uk
+ Based on owl.cpp
+ 
+ FAUST Architecture File
+ Copyright (C) 2003-2019 GRAME, Centre National de Creation Musicale
+ ---------------------------------------------------------------------
+ This Architecture section is free software; you can redistribute it
+ and/or modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 3 of
+ the License, or (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; If not, see <http://www.gnu.org/licenses/>.
+ 
+ EXCEPTION : As a special exception, you may create a larger work
+ that contains this FAUST architecture section and distribute
+ that work under terms of your choice, so long as this FAUST
+ architecture section is not modified.
+ 
  ************************************************************************
  ************************************************************************/
 
@@ -65,7 +63,6 @@ using namespace std;
 
 // for OSC support
 #ifdef OSCCTRL
-#include "faust/gui/OSCUI.h"
 #include "faust/gui/BelaOSCUI.h"
 #endif
 
@@ -176,88 +173,88 @@ enum EInOutPin
 class BelaWidget
 {
     
-protected:
-    
-    EInOutPin fBelaPin;
-    FAUSTFLOAT* fZone;  // zone
-    const char* fLabel; // label
-    FAUSTFLOAT fMin;    // minimal value
-    FAUSTFLOAT fRange;  // value range (max-min)
-    
-public:
-    
-    BelaWidget()
-    :fBelaPin(kNoPin)
-    ,fZone(0)
-    ,fLabel("")
-    ,fMin(0)
-    ,fRange(1)
-    {}
-    
-    BelaWidget(const BelaWidget& w)
-    :fBelaPin(w.fBelaPin)
-    ,fZone(w.fZone)
-    ,fLabel(w.fLabel)
-    ,fMin(w.fMin)
-    ,fRange(w.fRange)
-    {}
-    
-    BelaWidget(EInOutPin pin, FAUSTFLOAT* z, const char* l, FAUSTFLOAT lo, FAUSTFLOAT hi)
-    :fBelaPin(pin)
-    ,fZone(z)
-    ,fLabel(l)
-    ,fMin(lo)
-    ,fRange(hi-lo)
-    {}
-    
-    void update(BelaContext* context)
-    {
-        switch(fBelaPin) {
-            case kANALOG_0:
-            case kANALOG_1:
-            case kANALOG_2:
-            case kANALOG_3:
-            case kANALOG_4:
-            case kANALOG_5:
-            case kANALOG_6:
-            case kANALOG_7:
-                *fZone = fMin + fRange * analogReadNI(context, 0, (int)fBelaPin);
-                break;
-                
-            case kDIGITAL_0:
-            case kDIGITAL_1:
-            case kDIGITAL_2:
-            case kDIGITAL_3:
-            case kDIGITAL_4:
-            case kDIGITAL_5:
-            case kDIGITAL_6:
-            case kDIGITAL_7:
-            case kDIGITAL_8:
-            case kDIGITAL_9:
-            case kDIGITAL_10:
-            case kDIGITAL_11:
-            case kDIGITAL_12:
-            case kDIGITAL_13:
-            case kDIGITAL_14:
-            case kDIGITAL_15:
-                *fZone = digitalRead(context, 0, ((int)fBelaPin - kDIGITAL_0)) == 0 ? fMin : fMin+fRange;
-                break;
-                
-            case kANALOG_OUT_0:
-            case kANALOG_OUT_1:
-            case kANALOG_OUT_2:
-            case kANALOG_OUT_3:
-            case kANALOG_OUT_4:
-            case kANALOG_OUT_5:
-            case kANALOG_OUT_6:
-            case kANALOG_OUT_7:
-                analogWriteNI(context, 0, ((int)fBelaPin) - kANALOG_OUT_0, (*fZone - fMin)/(fRange+fMin));
-                break;
-                
-            default:
-                break;
-        };
-    }
+    protected:
+        
+        EInOutPin fBelaPin;
+        FAUSTFLOAT* fZone;  // zone
+        const char* fLabel; // label
+        FAUSTFLOAT fMin;    // minimal value
+        FAUSTFLOAT fRange;  // value range (max-min)
+        
+    public:
+        
+        BelaWidget()
+        :fBelaPin(kNoPin)
+        ,fZone(0)
+        ,fLabel("")
+        ,fMin(0)
+        ,fRange(1)
+        {}
+        
+        BelaWidget(const BelaWidget& w)
+        :fBelaPin(w.fBelaPin)
+        ,fZone(w.fZone)
+        ,fLabel(w.fLabel)
+        ,fMin(w.fMin)
+        ,fRange(w.fRange)
+        {}
+        
+        BelaWidget(EInOutPin pin, FAUSTFLOAT* z, const char* l, FAUSTFLOAT lo, FAUSTFLOAT hi)
+        :fBelaPin(pin)
+        ,fZone(z)
+        ,fLabel(l)
+        ,fMin(lo)
+        ,fRange(hi-lo)
+        {}
+        
+        void update(BelaContext* context)
+        {
+            switch(fBelaPin) {
+                case kANALOG_0:
+                case kANALOG_1:
+                case kANALOG_2:
+                case kANALOG_3:
+                case kANALOG_4:
+                case kANALOG_5:
+                case kANALOG_6:
+                case kANALOG_7:
+                    *fZone = fMin + fRange * analogReadNI(context, 0, (int)fBelaPin);
+                    break;
+                    
+                case kDIGITAL_0:
+                case kDIGITAL_1:
+                case kDIGITAL_2:
+                case kDIGITAL_3:
+                case kDIGITAL_4:
+                case kDIGITAL_5:
+                case kDIGITAL_6:
+                case kDIGITAL_7:
+                case kDIGITAL_8:
+                case kDIGITAL_9:
+                case kDIGITAL_10:
+                case kDIGITAL_11:
+                case kDIGITAL_12:
+                case kDIGITAL_13:
+                case kDIGITAL_14:
+                case kDIGITAL_15:
+                    *fZone = digitalRead(context, 0, ((int)fBelaPin - kDIGITAL_0)) == 0 ? fMin : fMin+fRange;
+                    break;
+                    
+                case kANALOG_OUT_0:
+                case kANALOG_OUT_1:
+                case kANALOG_OUT_2:
+                case kANALOG_OUT_3:
+                case kANALOG_OUT_4:
+                case kANALOG_OUT_5:
+                case kANALOG_OUT_6:
+                case kANALOG_OUT_7:
+                    analogWriteNI(context, 0, ((int)fBelaPin) - kANALOG_OUT_0, (*fZone - fMin)/(fRange+fMin));
+                    break;
+                    
+                default:
+                    break;
+            };
+        }
     
 };
 
@@ -278,69 +275,80 @@ public:
 class BelaUI : public GenericUI
 {
     
-private:
-    
-    int fIndex;                           // number of BelaWidgets collected so far
-    EInOutPin fBelaPin;                   // current pin id
-    BelaWidget fTable[MAXBELAWIDGETS];    // kind of static list of BelaWidgets
-    
-    // check if the widget is linked to a Bela parameter and, if so, add the corresponding BelaWidget
-    void addBelaWidget(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT lo, FAUSTFLOAT hi)
-    {
-        if (fBelaPin != kNoPin && (fIndex < MAXBELAWIDGETS)) {
-            fTable[fIndex] = BelaWidget(fBelaPin, zone, label, lo, hi);
-            fIndex++;
+    private:
+        
+        int fIndex;                           // number of BelaWidgets collected so far
+        EInOutPin fBelaPin;                   // current pin id
+        BelaWidget fTable[MAXBELAWIDGETS];    // kind of static list of BelaWidgets
+        
+        // check if the widget is linked to a Bela parameter and, if so, add the corresponding BelaWidget
+        void addBelaWidget(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT lo, FAUSTFLOAT hi)
+        {
+            if (fBelaPin != kNoPin && (fIndex < MAXBELAWIDGETS)) {
+                fTable[fIndex] = BelaWidget(fBelaPin, zone, label, lo, hi);
+                fIndex++;
+            }
+            fBelaPin = kNoPin;
         }
-        fBelaPin = kNoPin;
-    }
-    
-public:
-    
-    BelaUI()
-    : fIndex(0)
-    , fBelaPin(kNoPin)
-    {}
-    
-    virtual ~BelaUI() {}
-    
-    // should be called before compute() to update widget's zones registered as Bela parameters
-    void update(BelaContext* context)
-    {
-        for (int i = 0; i < fIndex; i++) {
-            fTable[i].update(context);
+        
+    public:
+        
+        BelaUI()
+        : fIndex(0)
+        , fBelaPin(kNoPin)
+        {}
+        
+        virtual ~BelaUI() {}
+        
+        // should be called before compute() to update widget's zones registered as Bela parameters
+        void update(BelaContext* context)
+        {
+            for (int i = 0; i < fIndex; i++) {
+                fTable[i].update(context);
+            }
         }
-    }
-    
-    // -- active widgets
-    virtual void addButton(const char* label, FAUSTFLOAT* zone) { addBelaWidget(label, zone, FAUSTFLOAT(0), FAUSTFLOAT(1)); }
-    virtual void addCheckButton(const char* label, FAUSTFLOAT* zone) { addBelaWidget(label, zone, FAUSTFLOAT(0), FAUSTFLOAT(1)); }
-    virtual void addVerticalSlider(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT lo, FAUSTFLOAT hi, FAUSTFLOAT step) { addBelaWidget(label, zone, lo, hi); }
-    virtual void addHorizontalSlider(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT lo, FAUSTFLOAT hi, FAUSTFLOAT step) { addBelaWidget(label, zone, lo, hi); }
-    virtual void addNumEntry(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT lo, FAUSTFLOAT hi, FAUSTFLOAT step) { addBelaWidget(label, zone, lo, hi); }
-    
-    // -- passive widgets
-    virtual void addHorizontalBargraph(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT lo, FAUSTFLOAT hi) { addBelaWidget(label, zone, lo, hi); }
-    virtual void addVerticalBargraph(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT lo, FAUSTFLOAT hi) { addBelaWidget(label, zone, lo, hi); }
-    
-    // -- metadata declarations
-    virtual void declare(FAUSTFLOAT* z, const char* k, const char* id)
-    {
-        if (strcasecmp(k,"BELA") == 0) {
-            for (int i = 0; i < kNumInputPins; i++) {
-                if (strcasecmp(id, pinNamesStrings[i]) == 0) {
-                    fBelaPin = (EInOutPin)i;
+        
+        // -- active widgets
+        virtual void addButton(const char* label, FAUSTFLOAT* zone) { addBelaWidget(label, zone, FAUSTFLOAT(0), FAUSTFLOAT(1)); }
+        virtual void addCheckButton(const char* label, FAUSTFLOAT* zone) { addBelaWidget(label, zone, FAUSTFLOAT(0), FAUSTFLOAT(1)); }
+        virtual void addVerticalSlider(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT lo, FAUSTFLOAT hi, FAUSTFLOAT step) { addBelaWidget(label, zone, lo, hi); }
+        virtual void addHorizontalSlider(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT lo, FAUSTFLOAT hi, FAUSTFLOAT step) { addBelaWidget(label, zone, lo, hi); }
+        virtual void addNumEntry(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT init, FAUSTFLOAT lo, FAUSTFLOAT hi, FAUSTFLOAT step) { addBelaWidget(label, zone, lo, hi); }
+        
+        // -- passive widgets
+        virtual void addHorizontalBargraph(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT lo, FAUSTFLOAT hi) { addBelaWidget(label, zone, lo, hi); }
+        virtual void addVerticalBargraph(const char* label, FAUSTFLOAT* zone, FAUSTFLOAT lo, FAUSTFLOAT hi) { addBelaWidget(label, zone, lo, hi); }
+        
+        // -- metadata declarations
+        virtual void declare(FAUSTFLOAT* z, const char* k, const char* id)
+        {
+            if (strcasecmp(k,"BELA") == 0) {
+                for (int i = 0; i < kNumInputPins; i++) {
+                    if (strcasecmp(id, pinNamesStrings[i]) == 0) {
+                        fBelaPin = (EInOutPin)i;
+                    }
                 }
             }
         }
-    }
     
 };
 
 #endif // __FaustCommonInfrastructure__
 
-/**************************BEGIN USER SECTION **************************/
+/******************************************************************************
+ *******************************************************************************
+ 
+ VECTOR INTRINSICS
+ 
+ *******************************************************************************
+ *******************************************************************************/
 
 <<includeIntrinsic>>
+
+/********************END ARCHITECTURE SECTION (part 1/2)****************/
+
+/**************************BEGIN USER SECTION **************************/
+
 <<includeclass>>
 
 /***************************END USER SECTION ***************************/
@@ -351,9 +359,7 @@ std::list<GUI*> GUI::fGuiList;
 ztimedmap GUI::gTimedZoneMap;
 
 /**************************************************************************************
-
   Bela render.cpp that calls FAUST generated code
-
 ***************************************************************************************/
 
 #ifdef MIDICTRL
@@ -498,10 +504,6 @@ bool setup(BelaContext* context, void* userData)
 
 void render(BelaContext* context, void* userData)
 {
-    // OSC event handling
-#ifdef OSCCTRL
-    gOSCUI.scheduleOSC();
-#endif
     // Reads Bela pins and updates corresponding Faust Widgets zones
     gControlUI.update(context);
     // Synchronize all GUI controllers
@@ -522,3 +524,6 @@ void cleanup(BelaContext* context, void* userData)
     delete gMidiInterface;
 #endif
 }
+
+/********************END ARCHITECTURE SECTION (part 2/2)****************/
+

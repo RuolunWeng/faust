@@ -71,7 +71,7 @@ LLVMCodeContainer::LLVMCodeContainer(const string& name, int numInputs, int numO
 
     // Set "-fast-math"
     FastMathFlags FMF;
-#if defined(LLVM_60) || defined(LLVM_70) || defined(LLVM_80)
+#if defined(LLVM_60) || defined(LLVM_70) || defined(LLVM_80) || defined(LLVM_90) || defined(LLVM_100)
     FMF.setFast();  // has replaced the below function
 #else
     FMF.setUnsafeAlgebra();
@@ -91,7 +91,7 @@ LLVMCodeContainer::LLVMCodeContainer(const string& name, int numInputs, int numO
 
     // Set "-fast-math"
     FastMathFlags FMF;
-#if defined(LLVM_60) || defined(LLVM_70) || defined(LLVM_80)
+#if defined(LLVM_60) || defined(LLVM_70) || defined(LLVM_80) || defined(LLVM_90) || defined(LLVM_100)
     FMF.setFast();  // has replaced the below function
 #else
     FMF.setUnsafeAlgebra();
@@ -147,45 +147,10 @@ llvm::PointerType* LLVMCodeContainer::generateDspStruct()
     return PointerType::get(dsp_type, 0);
 }
 
-void LLVMCodeContainer::generateGetJSON()
-{
-    PointerType*  string_ptr = PointerType::get(fBuilder->getInt8Ty(), 0);
-    LLVMVecTypes  getJSON_args;
-    FunctionType* getJSON_type = FunctionType::get(string_ptr, makeArrayRef(getJSON_args), false);
-    Function* getJSON = Function::Create(getJSON_type, GlobalValue::ExternalLinkage, "getJSON" + fKlassName, fModule);
-
-    // Prepare compilation options
-    stringstream compile_options;
-    gGlobal->printCompilationOptions(compile_options, false);
-
-    // JSON generation
-    JSONInstVisitor json_visitor1;
-    generateUserInterface(&json_visitor1);
-
-    map<string, int> path_index_table;
-    for (auto& it : json_visitor1.fPathTable) {
-        // Get field index
-        path_index_table[it.second] = fStructVisitor.getFieldOffset(it.first);
-    }
-
-    faustassert(fStructVisitor.getFieldOffset("fSampleRate") != -1);
-
-    JSONInstVisitor json_visitor("", "", fNumInputs, fNumOutputs, fStructVisitor.getFieldOffset("fSampleRate"), "", "",
-                                 FAUSTVERSION, compile_options.str(), gGlobal->gReader.listLibraryFiles(),
-                                 gGlobal->gImportDirList, to_string(fStructVisitor.getStructSize()), path_index_table);
-    generateUserInterface(&json_visitor);
-    generateMetaData(&json_visitor);
-
-    BasicBlock* return_block = BasicBlock::Create(*fContext, "return_block", getJSON);
-    ReturnInst::Create(*fContext, fCodeProducer->genStringConstant(json_visitor.JSON(true)), return_block);
-
-    verifyFunction(*getJSON);
-    fBuilder->ClearInsertionPoint();
-}
-
 void LLVMCodeContainer::generateFunMaps()
 {
     if (gGlobal->gFastMath) {
+        generateFunMap("fabs", "fast_fabs", 1);
         generateFunMap("acos", "fast_acos", 1);
         generateFunMap("asin", "fast_asin", 1);
         generateFunMap("atan", "fast_atan", 1);
@@ -202,6 +167,7 @@ void LLVMCodeContainer::generateFunMaps()
         generateFunMap("log10", "fast_log10", 1);
         generateFunMap("pow", "fast_pow", 2);
         generateFunMap("remainder", "fast_remainder", 2);
+        generateFunMap("rint", "fast_rint", 1);
         generateFunMap("round", "fast_round", 1);
         generateFunMap("sin", "fast_sin", 1);
         generateFunMap("sqrt", "fast_sqrt", 1);
@@ -228,21 +194,21 @@ void LLVMCodeContainer::generateFunMap(const string& fun1_aux, const string& fun
     }
 
     // Creates function
-    FunTyped* fun_type = InstBuilder::genFunTyped(args1, InstBuilder::genBasicTyped(type), FunTyped::kDefault);
+    FunTyped* fun_type1 = InstBuilder::genFunTyped(args1, InstBuilder::genBasicTyped(type), FunTyped::kLocal);
+    FunTyped* fun_type2 = InstBuilder::genFunTyped(args1, InstBuilder::genBasicTyped(type), FunTyped::kDefault);
 
-    InstBuilder::genDeclareFunInst(fun2, fun_type)->accept(fCodeProducer);
+    InstBuilder::genDeclareFunInst(fun2, fun_type2)->accept(fCodeProducer);
     if (body) {
         BlockInst* block = InstBuilder::genBlockInst();
         block->pushBackInst(InstBuilder::genRetInst(InstBuilder::genFunCallInst(fun2, args2)));
-        InstBuilder::genDeclareFunInst(fun1, fun_type, block)->accept(fCodeProducer);
+        InstBuilder::genDeclareFunInst(fun1, fun_type1, block)->accept(fCodeProducer);
     }
 }
 
 void LLVMCodeContainer::produceInternal()
 {
     // Generate DSP structure
-    llvm::PointerType* dsp_ptr = generateDspStruct();
-    fCodeProducer = new LLVMInstVisitor(fModule, fBuilder, &fStructVisitor, dsp_ptr);
+    fCodeProducer = new LLVMInstVisitor(fModule, fBuilder, &fStructVisitor, generateDspStruct());
 
     /// Memory methods
     generateCalloc()->accept(fCodeProducer);
@@ -266,8 +232,8 @@ dsp_factory_base* LLVMCodeContainer::produceFactory()
     // Sub containers
     generateSubContainers();
 
-    llvm::PointerType* dsp_ptr = generateDspStruct();
-    fCodeProducer = new LLVMInstVisitor(fModule, fBuilder, &fStructVisitor, dsp_ptr);
+    // Generate DSP structure
+    fCodeProducer = new LLVMInstVisitor(fModule, fBuilder, &fStructVisitor, generateDspStruct());
 
     generateFunMaps();
 
@@ -281,16 +247,21 @@ dsp_factory_base* LLVMCodeContainer::produceFactory()
     generateAllocate("allocate" + fKlassName, "dsp", false, false)->accept(fCodeProducer);
     generateDestroy("destroy" + fKlassName, "dsp", false, false)->accept(fCodeProducer);
 
-    generateGetJSON();
+    // generateGetJSON generation
+    if (gGlobal->gFloatSize == 1) {
+        generateGetJSON<float>();
+    } else {
+        generateGetJSON<double>();
+    }
 
     // Compute
     generateCompute();
 
     // Link LLVM modules defined in 'ffunction'
     set<string> S;
-    string      error;
-
     collectLibrary(S);
+    string error;
+    
     if (S.size() > 0) {
         for (auto& f : S) {
             string module_name = unquote(f);

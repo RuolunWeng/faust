@@ -20,6 +20,8 @@
 #ifndef __faust_api__
 #define __faust_api__
 
+#include <cstdint>
+
 //===============API Reference==============
 //==========================================
 
@@ -139,7 +141,7 @@ class DspFaust
         // * `pitch`: MIDI note number (0-127)
         // * `velocity`: MIDI velocity (0-127)
         //--------------------------------------------------------
-        unsigned long keyOn(int, int);
+        uintptr_t keyOn(int, int);
 
         //----------------`int keyOff(int pitch)`-----------------
         // De-instantiate a polyphonic voice. This method can
@@ -170,12 +172,12 @@ class DspFaust
         // `deleteVoice` to access the parameters of a specific
         // voice.
         //--------------------------------------------------------
-        unsigned long newVoice();
+        uintptr_t newVoice();
 
         //---------`int deleteVoice(long voice)`------------------
         // De-instantiate a polyphonic voice. This method can
         // only be used if the `[style:poly]` metadata is used in
-        // the Faust code or if `-polyvoices` flag has been
+        // the Faust code or if `-nvoices` flag has been
         // provided before compilation.
         //
         // `deleteVoice` will return 0 if the object is not polyphonic
@@ -185,12 +187,12 @@ class DspFaust
         //
         // * `voice`: the address of the voice given by `newVoice`
         //--------------------------------------------------------
-        int deleteVoice(unsigned long);
+        int deleteVoice(uintptr_t);
 
         //-----------------`void allNotesOff()`----------------
-        // Gently terminates all the active voices.
+        // Terminates all the active voices, gently (with release when hard = false or immediately when hard = true).
         //--------------------------------------------------------
-        void allNotesOff();
+        void allNotesOff(bool hard = false);
 
         //-------`void propagateMidi(int count, double time, int type, int channel, int data1, int data2)`--------
         // Take a raw MIDI message and propagate it to the Faust
@@ -199,7 +201,7 @@ class DspFaust
         //
         // `propagateMidi` can
         // only be used if the `[style:poly]` metadata is used in
-        // the Faust code or if `-polyvoices` flag has been
+        // the Faust code or if `-nvoices` flag has been
         // provided before compilation.
         //
         // #### Arguments
@@ -270,7 +272,7 @@ class DspFaust
         //--------------------------------------------------------
         float getParamValue(int);
 
-        //----`void setVoiceParamValue(const char* address, long voice, float value)`-----
+        //----`void setVoiceParamValue(const char* address, uintptr_t voice, float value)`-----
         // Set the value of one of the parameters of the Faust
         // object in function of its address (path) for a
         // specific voice.
@@ -282,7 +284,7 @@ class DspFaust
         // from `keyOn`
         // * `value`: value of the parameter
         //--------------------------------------------------------
-        void setVoiceParamValue(const char*, unsigned long, float);
+        void setVoiceParamValue(const char*, uintptr_t, float);
 
         //----`void setVoiceValue(int id, long voice, float value)`-----
         // Set the value of one of the parameters of the Faust
@@ -296,7 +298,7 @@ class DspFaust
         // from `keyOn`
         // * `value`: value of the parameter
         //--------------------------------------------------------
-        void setVoiceParamValue(int, unsigned long, float);
+        void setVoiceParamValue(int, uintptr_t, float);
 
         //----`float getVoiceParamValue(const char* address, long voice)`----
         // Returns the value of a parameter in function of its
@@ -308,7 +310,7 @@ class DspFaust
         // * `voice`: address of the polyphonic voice (retrieved
         // from `keyOn`)
         //--------------------------------------------------------
-        float getVoiceParamValue(const char*, unsigned long);
+        float getVoiceParamValue(const char*, uintptr_t);
 
         //----`float getVoiceParamValue(int id, long voice)`----
         // Returns the value of a parameter in function of its
@@ -320,7 +322,7 @@ class DspFaust
         // * `voice`: address of the polyphonic voice (retrieved
         // from `keyOn`)
         //--------------------------------------------------------
-        float getVoiceParamValue(int, unsigned long);
+        float getVoiceParamValue(int, uintptr_t);
 
         //----`const char* getParamAddress(int id)`---------------
         // Returns the address (path) of a parameter in function
@@ -342,7 +344,7 @@ class DspFaust
         // * `voice`: address of the polyphonic voice (retrieved
         // from `keyOn`)
         //--------------------------------------------------------
-        const char* getVoiceParamAddress(int, unsigned long);
+        const char* getVoiceParamAddress(int, uintptr_t);
 
         //-------`float getParamMin(const char* address)`---------
         // Returns the minimum value of a parameter in function of
@@ -477,7 +479,7 @@ class DspFaust
         void setGyrConverter(int, int, int, float, float, float);
 
         //------------------`float getCPULoad()`------------------
-        // Returns the CPU load.
+        // Returns the CPU load (between 0 and 1.0).
         //--------------------------------------------------------
         float getCPULoad();
 

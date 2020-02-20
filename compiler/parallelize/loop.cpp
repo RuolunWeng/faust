@@ -23,29 +23,7 @@
 #include "Text.hh"
 #include "global.hh"
 
-/*
-SL : 28/09/17
-extern bool gVectorSwitch;
-extern bool gOpenMPSwitch;
-extern bool gOpenMPLoop;
-*/
-
 using namespace std;
-
-/**
- * Print n tabs (for indentation purpose)
- * @param n number of tabs to print
- * @param fout output stream
- */
-
-/*
-SL : 28/09/17
-static void tab(int n, ostream& fout)
-{
-    fout << '\n';
-    while (n--) fout << '\t';
-}
- */
 
 /**
  * Print a list of lines
@@ -142,7 +120,7 @@ bool Loop::hasRecDependencyIn(Tree S)
 }
 
 /**
- * Test if a loop is empty that is if it contains no lines of code).
+ * Test if a loop is empty that is if it contains no lines of code.
  * @return true if the loop is empty
  */
 bool Loop::isEmpty()
@@ -151,7 +129,7 @@ bool Loop::isEmpty()
 }
 
 /**
- * Add a line of pre code  (begin of the loop)
+ * Add a line of pre code (begin of the loop)
  */
 void Loop::addPreCode(const Statement& stmt)
 {
@@ -185,6 +163,7 @@ void Loop::addPostCode(const Statement& stmt)
 void Loop::absorb(Loop* l)
 {
     // the loops must have the same number of iterations
+    //cerr << "Loop absorbtion : " << this << " absorb " << l << endl;
     faustassert(fSize == l->fSize);
     fRecSymbolSet = setUnion(fRecSymbolSet, l->fRecSymbolSet);
 
@@ -204,18 +183,31 @@ void Loop::absorb(Loop* l)
  */
 void Loop::println(int n, ostream& fout)
 {
-    for (list<Loop*>::const_iterator s = fExtraLoops.begin(); s != fExtraLoops.end(); s++) {
-        (*s)->println(n, fout);
+    for (Loop* l : fExtraLoops) {
+        l->println(n, fout);
     }
 
-    if (fPreCode.size() + fExecCode.size() + fPostCode.size() > 0) {
-        /* if (gVectorSwitch) {
-            tab(n,fout);
-            fout << ((fIsRecursive) ? "// recursive loop" : "// vectorizable loop");
-        }*/
+    tab(n, fout);
+    fout << "// Extra loops  : ";
+    for (Loop* l : fExtraLoops) fout << l << " ";
 
-        tab(n, fout);
-        fout << "// " << ((fIsRecursive) ? "Recursive" : "Vectorizable") << " loop " << this;
+    tab(n, fout);
+    fout << "// Backward loops: ";
+    bool emptyflag = true;
+    for (Loop* l : fBackwardLoopDependencies) {
+        emptyflag = false;
+        fout << l << " ";
+    }  ///< Loops that must be computed before this one
+    if (emptyflag) fout << "WARNING EMPTY";
+
+    tab(n, fout);
+    fout << "// Forward loops : ";
+    for (Loop* l : fForwardLoopDependencies) fout << l << " ";
+
+    tab(n, fout);
+    fout << "// " << ((fIsRecursive) ? "Recursive" : "Vectorizable") << " loop " << this;
+
+    if (fPreCode.size() + fExecCode.size() + fPostCode.size() > 0) {
         if (fPreCode.size() > 0) {
             tab(n, fout);
             fout << "// pre processing";
@@ -236,6 +228,8 @@ void Loop::println(int n, ostream& fout)
             printlines(n, fPostCode, fout);
         }
         tab(n, fout);
+    } else {
+        fout << "// empty loop " << this;
     }
 }
 
@@ -305,11 +299,6 @@ void Loop::printParLoopln(int n, ostream& fout)
 void Loop::printoneln(int n, ostream& fout)
 {
     if (fPreCode.size() + fExecCode.size() + fPostCode.size() > 0) {
-        /*        if (gVectorSwitch) {
-                    tab(n,fout);
-                    fout << ((fIsRecursive) ? "// recursive loop" : "// vectorizable loop");
-                }*/
-
         tab(n, fout);
         fout << "for (int i=0; i<" << fSize << "; i++) {";
         if (fPreCode.size() > 0) {

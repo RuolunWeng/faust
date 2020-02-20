@@ -32,6 +32,7 @@
 
 #include "faust/audio/dummy-audio.h"
 #include "faust/dsp/interpreter-dsp.h"
+#include "faust/dsp/dsp-bench.h"
 #include "faust/gui/meta.h"
 #include "faust/gui/DecoratorUI.h"
 #include "faust/gui/MapUI.h"
@@ -118,17 +119,17 @@ int main(int argc, char* argv[])
     
     if (isopt(argv, "-h") || isopt(argv, "-help") || trace_mode < 0 || trace_mode > 7) {
         cout << "interp-tracer [-trace <1-7>] [-control] [-output] [-noui] [-timeout <num>] [additional Faust options (-ftz xx)] foo.dsp" << endl;
-        cout << "-control to activate min/max control check\n";
+        cout << "-control to activate min/max control check then setting all controllers (inside their range) in a random way\n";
         cout << "-output to display output samples\n";
         cout << "-noui to start the application without UI\n";
         cout << "-timeout <num> when used in -noui mode, to stop the application after a given timeout in seconds (default = 10s)\n";
         cout << "-trace 1 to collect FP_SUBNORMAL only\n";
         cout << "-trace 2 to collect FP_SUBNORMAL, FP_INFINITE and FP_NAN\n";
         cout << "-trace 3 to collect FP_SUBNORMAL, FP_INFINITE, FP_NAN, INTEGER_OVERFLOW and DIV_BY_ZERO\n";
-        cout << "-trace 4 to collect FP_SUBNORMAL, FP_INFINITE, FP_NAN, INTEGER_OVERFLOW, DIV_BY_ZERO and LOAD errors, fails at first FP_INFINITE, FP_NAN or LOAD errors\n";
-        cout << "-trace 5 to collect FP_SUBNORMAL, FP_INFINITE, FP_NAN, INTEGER_OVERFLOW, DIV_BY_ZERO and LOAD errors, continue after FP_INFINITE, FP_NAN or LOAD errors\n";
-        cout << "-trace 6 to only check LOAD errors and continue\n";
-        cout << "-trace 7 to only check LOAD errors and exit\n";
+        cout << "-trace 4 to collect FP_SUBNORMAL, FP_INFINITE, FP_NAN, INTEGER_OVERFLOW, DIV_BY_ZERO and LOAD/STORE errors, fails at first FP_INFINITE, FP_NAN or LOAD/STORE errors\n";
+        cout << "-trace 5 to collect FP_SUBNORMAL, FP_INFINITE, FP_NAN, INTEGER_OVERFLOW, DIV_BY_ZERO and LOAD/STORE errors, continue after FP_INFINITE, FP_NAN or LOAD/STORE errors\n";
+        cout << "-trace 6 to only check LOAD/STORE errors and continue\n";
+        cout << "-trace 7 to only check LOAD/STORE errors and exit\n";
         exit(EXIT_FAILURE);
     }
     cout << "Libfaust version : " << getCLibFaustVersion () << endl;
@@ -150,7 +151,6 @@ int main(int argc, char* argv[])
         cout << argv[i] << " ";
     }
     cout << endl;
-    
     argv1[argc1] = nullptr;  // NULL terminated argv
     
     cout << "Using interpreter backend" << endl;
@@ -164,122 +164,142 @@ int main(int argc, char* argv[])
         setenv("FAUST_INTERP_OUTPUT", mode, 1);
     }
     
-    string error_msg;
-    // argc : without the filename (last element);
-    dsp_factory* factory = createInterpreterDSPFactoryFromFile(argv[argc-1], argc1, argv1, error_msg);
-    
-    if (!factory) {
-        cerr << "Cannot create factory : " << error_msg;
-        exit(EXIT_FAILURE);
-    }
-    
-    dsp* DSP = factory->createDSPInstance();
-    if (!DSP) {
-        cerr << "Cannot create instance " << endl;
-        exit(EXIT_FAILURE);
-    }
-    
-    cout << "getName " << factory->getName() << endl;
-    
-    dummyaudio audio(44100, 16, INT_MAX);
-    if (!audio.init(filename, DSP)) {
-        exit(EXIT_FAILURE);
-    }
-    
+    dsp_factory* factory = nullptr;
+    dsp* DSP = nullptr;
     GUI* interface = nullptr;
-    if (!is_noui) {
-        interface = new GTKUI(filename, &argc, &argv);
-        DSP->buildUserInterface(interface);
-    }
+    RandomControlUI random;
     
-    if (is_control) {
+    try {
+    
+        string error_msg;
+        // argc : without the filename (last element)
+        factory = createInterpreterDSPFactoryFromFile(argv[argc-1], argc1, argv1, error_msg);
         
-        // Check by setting each control to min, the max, then reset to init before going to next one
-        {
-            CheckControlUI ctl;
-            DSP->buildUserInterface(&ctl);
-            
-            cout << "------------------------------" << endl;
-            cout << "Check control min/max for " << ctl.fControlZone.size() << " controls" << endl;
-            for (int index = 0; index < ctl.fControlZone.size(); index++) {
-                cout << "------------------------------" << endl;
-                cout << "Control: " << ctl.getParamAddress(ctl.fControlZone[index].first) << endl;
-                FAUSTFLOAT min = ctl.fControlZone[index].second.fMin;
-                FAUSTFLOAT max = ctl.fControlZone[index].second.fMax;
-                FAUSTFLOAT init = ctl.fControlZone[index].second.fInit;
-                // Test min
-                cout << "Min: " << min << endl;
-                *ctl.fControlZone[index].first = min;
-                audio.render();
-                *ctl.fControlZone[index].first = init; // reset to init
-                // Test max
-                cout << "Max: " << max << endl;
-                *ctl.fControlZone[index].first = max;
-                audio.render();
-                *ctl.fControlZone[index].first = init; // reset to init
-            }
+        if (!factory) {
+            cerr << error_msg;
+            exit(EXIT_FAILURE);
         }
         
-        // Check by setting each control to max, then min, then keeping to min before going to next one
-        {
-            CheckControlUI ctl;
-            DSP->buildUserInterface(&ctl);
-            
-            cout << "------------------------------" << endl;
-            cout << "Check control min/max successively keeping min for " << ctl.fControlZone.size() << " controls" << endl;
-            for (int index = 0; index < ctl.fControlZone.size(); index++) {
-                cout << "------------------------------" << endl;
-                cout << "Control: " << ctl.getParamAddress(ctl.fControlZone[index].first) << endl;
-                FAUSTFLOAT min = ctl.fControlZone[index].second.fMin;
-                FAUSTFLOAT max = ctl.fControlZone[index].second.fMax;
-                FAUSTFLOAT init = ctl.fControlZone[index].second.fInit;
-                // Test max
-                cout << "Max: " << max << endl;
-                *ctl.fControlZone[index].first = max;
-                audio.render();
-                // Test min
-                cout << "Min: " << min << endl;
-                *ctl.fControlZone[index].first = min;
-                audio.render();
-            }
+        DSP = factory->createDSPInstance();
+        if (!DSP) {
+            cerr << "Cannot create instance " << endl;
+            exit(EXIT_FAILURE);
         }
         
-        // Check by setting each control to min, then max, then keeping to max before going to next one
-        {
-            CheckControlUI ctl;
-            DSP->buildUserInterface(&ctl);
+        cout << "getName " << factory->getName() << endl;
+        
+        dummyaudio audio(44100, 16, INT_MAX);
+        if (!audio.init(filename, DSP)) {
+            exit(EXIT_FAILURE);
+        }
+        
+        if (!is_noui) {
+            interface = new GTKUI(filename, &argc, &argv);
+            DSP->buildUserInterface(interface);
+        }
+        
+        if (is_control) {
             
-            cout << "------------------------------" << endl;
-            cout << "Check control min/max successively, keeping max for " << ctl.fControlZone.size() << " controls" << endl;
-            for (int index = 0; index < ctl.fControlZone.size(); index++) {
+            // Check by setting each control to min, the max, then reset to init before going to next one
+            {
+                CheckControlUI ctl;
+                DSP->buildUserInterface(&ctl);
+                
                 cout << "------------------------------" << endl;
-                cout << "Control: " << ctl.getParamAddress(ctl.fControlZone[index].first) << endl;
-                FAUSTFLOAT min = ctl.fControlZone[index].second.fMin;
-                FAUSTFLOAT max = ctl.fControlZone[index].second.fMax;
-                FAUSTFLOAT init = ctl.fControlZone[index].second.fInit;
-                // Test min
-                cout << "Min: " << min << endl;
-                *ctl.fControlZone[index].first = min;
-                audio.render();
-                // Test max
-                cout << "Max: " << max << endl;
-                *ctl.fControlZone[index].first = max;
+                cout << "Check control min/max for " << ctl.fControlZone.size() << " controls" << endl;
+                for (int index = 0; index < ctl.fControlZone.size(); index++) {
+                    cout << "------------------------------" << endl;
+                    cout << "Control: " << ctl.getParamAddress(ctl.fControlZone[index].first) << endl;
+                    FAUSTFLOAT min = ctl.fControlZone[index].second.fMin;
+                    FAUSTFLOAT max = ctl.fControlZone[index].second.fMax;
+                    FAUSTFLOAT init = ctl.fControlZone[index].second.fInit;
+                    // Test min
+                    cout << "Min: " << min << endl;
+                    *ctl.fControlZone[index].first = min;
+                    audio.render();
+                    *ctl.fControlZone[index].first = init; // reset to init
+                    // Test max
+                    cout << "Max: " << max << endl;
+                    *ctl.fControlZone[index].first = max;
+                    audio.render();
+                    *ctl.fControlZone[index].first = init; // reset to init
+                }
+            }
+            
+            // Check by setting each control to max, then min, then keeping to min before going to next one
+            {
+                CheckControlUI ctl;
+                DSP->buildUserInterface(&ctl);
+                
+                cout << "------------------------------" << endl;
+                cout << "Check control min/max successively keeping min for " << ctl.fControlZone.size() << " controls" << endl;
+                for (int index = 0; index < ctl.fControlZone.size(); index++) {
+                    cout << "------------------------------" << endl;
+                    cout << "Control: " << ctl.getParamAddress(ctl.fControlZone[index].first) << endl;
+                    FAUSTFLOAT min = ctl.fControlZone[index].second.fMin;
+                    FAUSTFLOAT max = ctl.fControlZone[index].second.fMax;
+                    FAUSTFLOAT init = ctl.fControlZone[index].second.fInit;
+                    // Test max
+                    cout << "Max: " << max << endl;
+                    *ctl.fControlZone[index].first = max;
+                    audio.render();
+                    // Test min
+                    cout << "Min: " << min << endl;
+                    *ctl.fControlZone[index].first = min;
+                    audio.render();
+                }
+            }
+            
+            // Check by setting each control to min, then max, then keeping to max before going to next one
+            {
+                CheckControlUI ctl;
+                DSP->buildUserInterface(&ctl);
+                
+                cout << "------------------------------" << endl;
+                cout << "Check control min/max successively, keeping max for " << ctl.fControlZone.size() << " controls" << endl;
+                for (int index = 0; index < ctl.fControlZone.size(); index++) {
+                    cout << "------------------------------" << endl;
+                    cout << "Control: " << ctl.getParamAddress(ctl.fControlZone[index].first) << endl;
+                    FAUSTFLOAT min = ctl.fControlZone[index].second.fMin;
+                    FAUSTFLOAT max = ctl.fControlZone[index].second.fMax;
+                    FAUSTFLOAT init = ctl.fControlZone[index].second.fInit;
+                    // Test min
+                    cout << "Min: " << min << endl;
+                    *ctl.fControlZone[index].first = min;
+                    audio.render();
+                    // Test max
+                    cout << "Max: " << max << endl;
+                    *ctl.fControlZone[index].first = max;
+                    audio.render();
+                }
+            }
+            
+            // Generate random values for controllers
+            DSP->buildUserInterface(&random);
+            cout << "------------------------------" << endl;
+            cout << "Use RandomControlUI" << endl;
+            for (int step = 0; step < 1000; step++) {
+                cout << "Set random controllers, step: " << step <<  " until: " << 1000 << endl;
+                random.update();
                 audio.render();
             }
-        }
 
-        goto end;
-        
-    } else {
-        audio.start();
+            goto end;
+            
+        } else {
+            audio.start();
+        }
+       
+        if (!is_noui) {
+            interface->run();
+        } else {
+            usleep(time_out * 1e6);
+        }
+        audio.stop();
+    } catch (...) {
+        cout << endl;
+        random.display();
     }
-   
-    if (!is_noui) {
-        interface->run();
-    } else {
-        usleep(time_out * 1e6);
-    }
-    audio.stop();
     
 end:
     

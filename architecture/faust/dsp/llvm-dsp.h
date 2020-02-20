@@ -1,3 +1,4 @@
+/************************** BEGIN llvm-dsp.h **************************/
 /************************************************************************
  ************************************************************************
  Copyright (C) 2003-2017 GRAME, Centre National de Creation Musicale
@@ -30,6 +31,7 @@
 
 #include <string>
 #include <vector>
+
 #include "faust/dsp/dsp.h"
 #include "faust/gui/meta.h"
 
@@ -461,3 +463,4 @@ DEPRECATED(void deleteDSPInstance(llvm_dsp* dsp));
  */
 
 #endif
+/**************************  END  llvm-dsp.h **************************/

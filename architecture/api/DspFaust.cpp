@@ -34,6 +34,10 @@
 // Must be done before <<includeclass>> otherwise the 'Soundfile' type is not known
 
 #if SOUNDFILE
+// So that the code uses JUCE audio file loading code
+#if JUCE_DRIVER
+#define JUCE_64BIT 1
+#endif
 #include "faust/gui/SoundUI.h"
 #endif
 
@@ -68,8 +72,7 @@
 #elif IOS_DRIVER
     #include "faust/audio/coreaudio-ios-dsp.h"
 #elif ANDROID_DRIVER
-    #include <android/log.h>
-    #include "faust/audio/android-dsp.h"
+    #include "faust/audio/oboe-dsp.h"
 #elif ALSA_DRIVER
     #include "faust/audio/alsa-dsp.h"
 #elif JACK_DRIVER
@@ -136,7 +139,7 @@ DspFaust::DspFaust(bool auto_connect)
     // JUCE audio device has its own sample rate and buffer size
     driver = new juceaudio();
 #else
-    std::cout << "You are not setting 'sample_rate' and 'buffer_size', but the audio driver needs it !\n";
+    std::cerr << "You are not setting 'sample_rate' and 'buffer_size', but the audio driver needs it !\n";
     throw std::bad_alloc();
 #endif
     init(NULL, driver);
@@ -180,12 +183,14 @@ audio* DspFaust::createDriver(int sample_rate, int buffer_size, bool auto_connec
 #elif IOS_DRIVER
     audio* driver = new iosaudio(sample_rate, buffer_size);
 #elif ANDROID_DRIVER
-    audio* driver = new androidaudio(sample_rate, buffer_size);
+    // OBOE has its own and buffer size
+    std::cerr << "You are setting 'buffer_size' with a driver that does not need it !\n";
+    audio* driver = new oboeaudio(-1);
 #elif ALSA_DRIVER
     audio* driver = new alsaaudio(sample_rate, buffer_size);
 #elif JACK_DRIVER
     // JACK has its own sample rate and buffer size
-    std::cout << "You are setting 'sample_rate' and 'buffer_size' with a driver that does not need it !\n";
+    std::cerr << "You are setting 'sample_rate' and 'buffer_size' with a driver that does not need it !\n";
 #if MIDICTRL
     audio* driver = new jackaudio_midi(auto_connect);
 #else
@@ -199,7 +204,7 @@ audio* DspFaust::createDriver(int sample_rate, int buffer_size, bool auto_connec
     audio* driver = new ofaudio(sample_rate, buffer_size);
 #elif JUCE_DRIVER
     // JUCE audio device has its own sample rate and buffer size
-    std::cout << "You are setting 'sample_rate' and 'buffer_size' with a driver that does not need it !\n";
+    std::cerr << "You are setting 'sample_rate' and 'buffer_size' with a driver that does not need it !\n";
     audio* driver = new juceaudio();
 #elif DUMMY_DRIVER
     audio* driver = new dummyaudio(sample_rate, buffer_size);
@@ -346,9 +351,9 @@ bool DspFaust::isRunning()
 	return fPolyEngine->isRunning();
 }
 
-unsigned long DspFaust::keyOn(int pitch, int velocity)
+uintptr_t DspFaust::keyOn(int pitch, int velocity)
 {
-	return (unsigned long)fPolyEngine->keyOn(pitch, velocity);
+	return (uintptr_t)fPolyEngine->keyOn(pitch, velocity);
 }
 
 int DspFaust::keyOff(int pitch)
@@ -356,19 +361,19 @@ int DspFaust::keyOff(int pitch)
 	return fPolyEngine->keyOff(pitch);
 }
 
-unsigned long DspFaust::newVoice()
+uintptr_t DspFaust::newVoice()
 {
-	return (unsigned long)fPolyEngine->newVoice();
+	return (uintptr_t)fPolyEngine->newVoice();
 }
 
-int DspFaust::deleteVoice(unsigned long voice)
+int DspFaust::deleteVoice(uintptr_t voice)
 {
 	return fPolyEngine->deleteVoice(voice);
 }
 
-void DspFaust::allNotesOff()
+void DspFaust::allNotesOff(bool hard)
 {
-    fPolyEngine->allNotesOff();
+    fPolyEngine->allNotesOff(hard);
 }
 
 void DspFaust::propagateMidi(int count, double time, int type, int channel, int data1, int data2)
@@ -411,22 +416,22 @@ float DspFaust::getParamValue(int id)
 	return fPolyEngine->getParamValue(id);
 }
 
-void DspFaust::setVoiceParamValue(const char* address, unsigned long voice, float value)
+void DspFaust::setVoiceParamValue(const char* address, uintptr_t voice, float value)
 {
 	fPolyEngine->setVoiceParamValue(address, voice, value);
 }
 
-void DspFaust::setVoiceParamValue(int id, unsigned long voice, float value)
+void DspFaust::setVoiceParamValue(int id, uintptr_t voice, float value)
 {
 	fPolyEngine->setVoiceParamValue(id, voice, value);
 }
 
-float DspFaust::getVoiceParamValue(const char* address, unsigned long voice)
+float DspFaust::getVoiceParamValue(const char* address, uintptr_t voice)
 {
 	return fPolyEngine->getVoiceParamValue(address, voice);
 }
 
-float DspFaust::getVoiceParamValue(int id, unsigned long voice)
+float DspFaust::getVoiceParamValue(int id, uintptr_t voice)
 {
 	return fPolyEngine->getVoiceParamValue(id, voice);
 }
@@ -436,7 +441,7 @@ const char* DspFaust::getParamAddress(int id)
 	return fPolyEngine->getParamAddress(id);
 }
 
-const char* DspFaust::getVoiceParamAddress(int id, unsigned long voice)
+const char* DspFaust::getVoiceParamAddress(int id, uintptr_t voice)
 {
 	return fPolyEngine->getVoiceParamAddress(id, voice);
 }

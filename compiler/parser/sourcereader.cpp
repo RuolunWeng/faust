@@ -237,7 +237,7 @@ void SourceReader::checkName()
         if (gGlobal->gMetaDataSet.find(name) == gGlobal->gMetaDataSet.end()) {
             gGlobal->gMetaDataSet[name].insert(tree(quote(stripEnd(basename((char*)yyfilename), ".dsp"))));
         }
-        gGlobal->gMetaDataSet[tree("filename")].insert(tree(quote(stripEnd(basename((char*)yyfilename), ".dsp"))));
+        gGlobal->gMetaDataSet[tree("filename")].insert(tree(quote(basename((char*)yyfilename))));
     }
 }
 
@@ -257,8 +257,7 @@ Tree SourceReader::parseFile(const char* fname)
     yyerr = 0;
     yylineno = 1;
     yyfilename = fname;
-    string fullpath;
-
+ 
     // We are requested to parse an URL file
     if (isURL(yyfilename)) {
         char* buffer = nullptr;
@@ -310,10 +309,10 @@ Tree SourceReader::parseFile(const char* fname)
         }
         
         // Try to open local file
-        string fullpath;
-        FILE* tmp_file = yyin = fopenSearch(yyfilename, fullpath); // Keep file to properly close it
+        string fullpath1;
+        FILE* tmp_file = yyin = fopenSearch(yyfilename, fullpath1); // Keep file to properly close it
         if (yyin) {
-            Tree res = parseLocal(fullpath.c_str());
+            Tree res = parseLocal(fullpath1.c_str());
             fclose(tmp_file);
             return res;
         } else {

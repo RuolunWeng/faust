@@ -75,7 +75,9 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
                 for (var i = 0; i < item.meta.length; i++) {
                     if (item.meta[i].midi !== undefined) {
                         if (item.meta[i].midi.trim() === "pitchwheel") {
-                            obj.fPitchwheelLabel.push(item.address);
+                            obj.fPitchwheelLabel.push({ path:item.address,
+                                  min:parseFloat(item.min),
+                                  max:parseFloat(item.max) });
                         } else if (item.meta[i].midi.trim().split(" ")[0] === "ctrl") {
                             obj.fCtrlLabel[parseInt(item.meta[i].midi.trim().split(" ")[1])]
                             .push({ path:item.address,
@@ -189,6 +191,7 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
     constructor(options)
     {
         super(options);
+        this.running = true;
         
         this.json_object = JSON.parse(getJSONmydsp());
         if (typeof (getJSONeffect) !== "undefined") {
@@ -222,8 +225,8 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
         // Memory allocator
         this.ptr_size = 4;
         this.sample_size = 4;
-        
-        var wasm_memory = mydspPolyProcessor.createMemory(mydspPolyProcessor.buffer_size, mydspPolyProcessor.polyphony);
+         
+        var wasm_memory = mydspPolyProcessor.createMemory(mydspPolyProcessor.buffer_size, options.processorOptions.polyphony);
 
         // Create Mixer
         this.mixerObject = { imports: { print: arg => console.log(arg) } }
@@ -346,7 +349,7 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
         }
         
         // Start of DSP memory ('polyphony' DSP voices)
-        this.polyphony = mydspPolyProcessor.polyphony;
+        this.polyphony = options.processorOptions.polyphony;
         this.dsp_voices = [];
         this.dsp_voices_state = [];
         this.dsp_voices_level = [];
@@ -362,7 +365,7 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
         // Allocate table for 'setParamValue'
         this.value_table = [];
         
-        for (var i = 0; i <  this.polyphony; i++) {
+        for (var i = 0; i < this.polyphony; i++) {
             this.dsp_voices[i] = this.dsp_start + i * parseInt(this.json_object.size);
             this.dsp_voices_state[i] = this.kFreeVoice;
             this.dsp_voices_level[i] = 0;
@@ -617,10 +620,10 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
         this.pitchWheel = function (channel, wheel)
         {
             for (var i = 0; i < this.fPitchwheelLabel.length; i++) {
-                var path = this.fPitchwheelLabel[i];
-                this.setParamValue(path, Math.pow(2.0, wheel/12.0));
+                var pw = this.fPitchwheelLabel[i];
+                this.setParamValue(pw.path, mydspPolyProcessor.remap(wheel, 0, 16383, pw.min, pw.max));
                 if (this.output_handler) {
-                   	this.output_handler(path, this.getParamValue(path));
+                   	this.output_handler(pw.path, this.getParamValue(pw.path));
                 }
             }
         }
@@ -666,6 +669,7 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
             // Generic data message
             case "param": this.setParamValue(msg.key, msg.value); break;
             //case "patch": this.onpatch(msg.data); break;
+            case "destroy": this.running = false; break;
         }
     }
   	
@@ -685,7 +689,7 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
         } else if (cmd === 11) {
             this.ctrlChange(channel, data1, data2);
         } else if (cmd === 14) {
-            this.pitchWheel(channel, ((data2 * 128.0 + data1)-8192)/8192.0);
+            this.pitchWheel(channel, (data2 * 128.0 + data1));
         }
     }
     
@@ -695,24 +699,24 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
         var output = outputs[0];
         
         // Check inputs
-        if (this.numIn > 0 && ((input === undefined) || (input[0].length === 0))) {
+        if (this.numIn > 0 && (!input || !input[0] || input[0].length === 0)) {
             //console.log("Process input error");
             return true;
         }
         // Check outputs
-        if (this.numOut > 0 && ((output === undefined) || (output[0].length === 0))) {
+        if (this.numOut > 0 && (!output || !output[0] || output[0].length === 0)) {
             //console.log("Process output error");
             return true;
         }
         
         // Copy inputs
         if (input !== undefined) {
-            for (var chan = 0; chan < Math.min(this.numIn, input.length) ; ++chan) {
+            for (var chan = 0; chan < Math.min(this.numIn, input.length); ++chan) {
                 var dspInput = this.dspInChannnels[chan];
                 dspInput.set(input[chan]);
             }
         }
-         
+       
         // Possibly call an externally given callback (for instance to synchronize playing a MIDIFile...)
         if (this.compute_handler) {
             this.compute_handler(mydspPolyProcessor.buffer_size);
@@ -722,22 +726,26 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
         this.mixer.clearOutput(mydspPolyProcessor.buffer_size, this.numOut, this.outs);
         
         // Compute all running voices
-        for (var i = 0; i < this.polyphony; i++) {
-            if (this.dsp_voices_state[i] != this.kFreeVoice) {
-                // Compute voice
-                this.factory.compute(this.dsp_voices[i], mydspPolyProcessor.buffer_size, this.ins, this.mixing);
-                // Mix it in result
-                this.dsp_voices_level[i] = this.mixer.mixVoice(mydspPolyProcessor.buffer_size, this.numOut, this.mixing, this.outs);
-                // Check the level to possibly set the voice in kFreeVoice again
-                if ((this.dsp_voices_level[i] < 0.0005) && (this.dsp_voices_state[i] === this.kReleaseVoice)) {
-                    this.dsp_voices_state[i] = this.kFreeVoice;
+        try {
+            for (var i = 0; i < this.polyphony; i++) {
+                if (this.dsp_voices_state[i] != this.kFreeVoice) {
+                    // Compute voice
+                    this.factory.compute(this.dsp_voices[i], mydspPolyProcessor.buffer_size, this.ins, this.mixing);
+                    // Mix it in result
+                    this.dsp_voices_level[i] = this.mixer.mixVoice(mydspPolyProcessor.buffer_size, this.numOut, this.mixing, this.outs);
+                    // Check the level to possibly set the voice in kFreeVoice again
+                    if ((this.dsp_voices_level[i] < 0.0005) && (this.dsp_voices_state[i] === this.kReleaseVoice)) {
+                        this.dsp_voices_state[i] = this.kFreeVoice;
+                    }
                 }
             }
-        }
-        
-        // Apply effect
-        if (this.effect) {
-            this.effect.compute(this.effect_start, mydspPolyProcessor.buffer_size, this.outs, this.outs);
+
+            // Apply effect
+            if (this.effect) {
+                this.effect.compute(this.effect_start, mydspPolyProcessor.buffer_size, this.outs, this.outs);
+            }
+        } catch(e) {
+        	console.log("ERROR in compute (" + e + ")");
         }
         
         // Update bargraph
@@ -751,13 +759,12 @@ class mydspPolyProcessor extends AudioWorkletProcessor {
             }
         }
         
-        return true;
+        return this.running;
     }
 }
 
 // Globals
 mydspPolyProcessor.buffer_size = 128;
-mydspPolyProcessor.polyphony = 16;
 
 // Synchronously compile and instantiate the WASM modules
 try {

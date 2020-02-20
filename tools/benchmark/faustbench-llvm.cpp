@@ -28,8 +28,8 @@
 
 using namespace std;
 
-template <typename T>
-static void bench(dsp_optimizer<T> optimizer, const string& name, bool trace)
+template <typename REAL>
+static void bench(dsp_optimizer<REAL> optimizer, const string& name, bool trace)
 {
     pair<double, vector<string> > res = optimizer.findOptimizedParameters();
     if (trace) cout << "Best value for '" << name << "' is : " << res.first << " with ";
@@ -100,7 +100,6 @@ int main(int argc, char* argv[])
     // Add library
     argv1[argc1++] = "-I";
     argv1[argc1++] = "/usr/local/share/faust";
- 
     argv1[argc1] = nullptr;  // NULL terminated argv
     
     //FAUSTBENCH_LOG<string>("faustbench LLVM");
@@ -113,7 +112,7 @@ int main(int argc, char* argv[])
             
             dsp_factory* factory = createDSPFactoryFromFile(in_filename, argc1, argv1, "", error_msg, opt);
             if (!factory) {
-                cerr << "Cannot create factory : " << error_msg;
+                cerr << error_msg;
                 exit(EXIT_FAILURE);
             }
             
@@ -123,13 +122,22 @@ int main(int argc, char* argv[])
                 exit(EXIT_FAILURE);
             }
             
-            measure_dsp mes(DSP, 512, 5.);  // Buffer_size and duration in sec of measure
-            for (int i = 0; i < run; i++) {
-                mes.measure();
-                if (is_trace) cout << in_filename << " : " << mes.getStats() << " " << "(DSP CPU % : " << (mes.getCPULoad() * 100) << ")" << endl;
-                FAUSTBENCH_LOG<double>(mes.getStats());
+            if (is_double) {
+                measure_dsp_aux<double> mes(DSP, 512, 5.);  // Buffer_size and duration in sec of measure
+                for (int i = 0; i < run; i++) {
+                    mes.measure();
+                    if (is_trace) cout << in_filename << " : " << mes.getStats() << " " << "(DSP CPU % : " << (mes.getCPULoad() * 100) << ")" << endl;
+                    FAUSTBENCH_LOG<double>(mes.getStats());
+                }
+            } else {
+                measure_dsp_aux<float> mes(DSP, 512, 5.);  // Buffer_size and duration in sec of measure
+                for (int i = 0; i < run; i++) {
+                    mes.measure();
+                    if (is_trace) cout << in_filename << " : " << mes.getStats() << " " << "(DSP CPU % : " << (mes.getCPULoad() * 100) << ")" << endl;
+                    FAUSTBENCH_LOG<double>(mes.getStats());
+                }
             }
-
+    
         } else {
             if (is_double) {
                 bench(dsp_optimizer<double>(in_filename.c_str(), argc1, argv1, target, buffer_size, run, -1, is_trace), in_filename, is_trace);

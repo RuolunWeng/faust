@@ -61,6 +61,19 @@
 #include "effect.h"
 #endif 
 
+// we require macro declarations
+#define FAUST_UIMACROS
+
+// but we will ignore most of them
+#define FAUST_ADDBUTTON(l,f)
+#define FAUST_ADDCHECKBOX(l,f)
+#define FAUST_ADDSOUNDFILE(l,s)
+#define FAUST_ADDVERTICALSLIDER(l,f,i,a,b,s)
+#define FAUST_ADDHORIZONTALSLIDER(l,f,i,a,b,s)
+#define FAUST_ADDNUMENTRY(l,f,i,a,b,s)
+#define FAUST_ADDVERTICALBARGRAPH(l,f,a,b)
+#define FAUST_ADDHORIZONTALBARGRAPH(l,f,a,b)
+
 <<includeIntrinsic>>
 
 <<includeclass>>
@@ -79,14 +92,14 @@ class FaustVoice : public SynthesiserVoice, public dsp_voice {
     
     private:
         
-        ScopedPointer<AudioBuffer<FAUSTFLOAT>> fBuffer;
+        std::unique_ptr<AudioBuffer<FAUSTFLOAT>> fBuffer;
         
     public:
         
         FaustVoice(dsp* dsp):dsp_voice(dsp)
         {
             // Allocate buffer for mixing
-            fBuffer = new AudioBuffer<FAUSTFLOAT>(dsp->getNumOutputs(), 8192);
+            fBuffer = std::make_unique<AudioBuffer<FAUSTFLOAT>>(dsp->getNumOutputs(), 8192);
             fDSP->init(SynthesiserVoice::getSampleRate());
         }
         
@@ -228,7 +241,6 @@ class FaustPlugInAudioProcessor : public AudioProcessor, private Timer
             jassert (isUsingDoublePrecision());
             process (buffer, midiMessages);
         }
-
     
         AudioProcessorEditor* createEditor() override;
         bool hasEditor() const override;
@@ -257,26 +269,26 @@ class FaustPlugInAudioProcessor : public AudioProcessor, private Timer
         bool supportsDoublePrecisionProcessing() const override;
     
     #ifdef JUCE_POLY
-        ScopedPointer<FaustSynthesiser> fSynth;
+        std::unique_ptr<FaustSynthesiser> fSynth;
     #else
     #if defined(MIDICTRL)
-        ScopedPointer<juce_midi_handler> fMIDIHandler;
-        ScopedPointer<MidiUI> fMIDIUI;
+        std::unique_ptr<juce_midi_handler> fMIDIHandler;
+        std::unique_ptr<MidiUI> fMIDIUI;
     #endif
-        ScopedPointer<dsp> fDSP;
+        std::unique_ptr<dsp> fDSP;
     #endif
         
     #if defined(OSCCTRL)
-        ScopedPointer<JuceOSCUI> fOSCUI;
+        std::unique_ptr<JuceOSCUI> fOSCUI;
     #endif
     
     #if defined(SOUNDFILE)
-        ScopedPointer<SoundUI> fSoundUI;
+        std::unique_ptr<SoundUI> fSoundUI;
     #endif
     
         JuceStateUI fStateUI;
         JuceParameterUI fParameterUI;
-        
+    
     private:
     
         template <typename FloatType>
@@ -309,8 +321,6 @@ class FaustPlugInAudioProcessorEditor : public AudioProcessorEditor
     
 };
 
-static mydsp gDSP;
-
 FaustPlugInAudioProcessor::FaustPlugInAudioProcessor()
 : AudioProcessor (getBusesProperties()), fParameterUI(this)
 {
@@ -323,7 +333,7 @@ FaustPlugInAudioProcessor::FaustPlugInAudioProcessor()
     
 #ifdef JUCE_POLY
     assert(nvoices > 0);
-    fSynth = new FaustSynthesiser();
+    fSynth = std::make_unique<FaustSynthesiser>();
     for (int i = 0; i < nvoices; i++) {
         fSynth->addVoice(new FaustVoice(new mydsp()));
     }
@@ -341,12 +351,12 @@ FaustPlugInAudioProcessor::FaustPlugInAudioProcessor()
     
 #if MIDICTRL
     if (midi_sync) {
-        fDSP = new timed_dsp(new dsp_sequencer(dsp_poly, new effect()));
+        fDSP = std::make_unique<timed_dsp>(new dsp_sequencer(dsp_poly, new effect()));
     } else {
-        fDSP = new dsp_sequencer(dsp_poly, new effect());
+        fDSP = std::make_unique<dsp_sequencer>(dsp_poly, new effect());
     }
 #else
-    fDSP = new dsp_sequencer(dsp_poly, new effects());
+    fDSP = std::make_unique<dsp_sequencer>(dsp_poly, new effects());
 #endif
     
 #else
@@ -356,32 +366,32 @@ FaustPlugInAudioProcessor::FaustPlugInAudioProcessor()
         
 #if MIDICTRL
         if (midi_sync) {
-            fDSP = new timed_dsp(dsp_poly);
+            fDSP = std::make_unique<timed_dsp>(dsp_poly);
         } else {
-            fDSP = dsp_poly;
+            fDSP = std::make_unique<decorator_dsp>(dsp_poly);
         }
 #else
-        fDSP = dsp_poly;
+        fDSP = std::make_unique<decorator_dsp>(dsp_poly);
 #endif
     } else {
 #if MIDICTRL
         if (midi_sync) {
-            fDSP = new timed_dsp(new mydsp());
+            fDSP = std::make_unique<timed_dsp>(new mydsp());
         } else {
-            fDSP = new mydsp();
+            fDSP = std::make_unique<mydsp>();
         }
 #else
-        fDSP = new mydsp();
+        fDSP = std::make_unique<mydsp>();
 #endif
     }
     
 #endif
     
 #if defined(MIDICTRL)
-    fMIDIHandler = new juce_midi_handler();
+    fMIDIHandler = std::make_unique<juce_midi_handler>();
     fMIDIHandler->addMidiIn(dsp_poly);
-    fMIDIUI = new MidiUI(fMIDIHandler);
-    fDSP->buildUserInterface(fMIDIUI);
+    fMIDIUI = std::make_unique<MidiUI>(fMIDIHandler.get());
+    fDSP->buildUserInterface(fMIDIUI.get());
     if (!fMIDIUI->run()) {
         std::cerr << "JUCE MIDI handler cannot be started..." << std::endl;
     }
@@ -390,11 +400,11 @@ FaustPlugInAudioProcessor::FaustPlugInAudioProcessor()
 #endif
     
 #if defined(OSCCTRL)
-    fOSCUI = new JuceOSCUI("127.0.0.1", 5510, 5511);
+    fOSCUI = std::make_unique<JuceOSCUI>("127.0.0.1", 5510, 5511);
 #ifdef JUCE_POLY
-    fSynth->buildUserInterface(fOSCUI);
+    fSynth->buildUserInterface(fOSCUI.get());
 #else
-    fDSP->buildUserInterface(fOSCUI);
+    fDSP->buildUserInterface(fOSCUI.get());
 #endif
     if (!fOSCUI->run()) {
         std::cerr << "JUCE OSC handler cannot be started..." << std::endl;
@@ -404,20 +414,28 @@ FaustPlugInAudioProcessor::FaustPlugInAudioProcessor()
 #if defined(SOUNDFILE)
     // Use bundle path
     auto file = File::getSpecialLocation(File::currentExecutableFile)
-        .getParentDirectory().getParentDirectory().getChildFile("Resources");
-    fSoundUI = new SoundUI(file.getFullPathName().toStdString());
+    .getParentDirectory().getParentDirectory().getChildFile("Resources");
+    fSoundUI = std::make_unique<SoundUI>(file.getFullPathName().toStdString());
     // SoundUI has to be dispatched on all internal voices
     if (dsp_poly) dsp_poly->setGroup(false);
-    fDSP->buildUserInterface(fSoundUI);
+    fDSP->buildUserInterface(fSoundUI.get());
     if (dsp_poly) dsp_poly->setGroup(group);
 #endif
     
 #ifdef JUCE_POLY
     fSynth->buildUserInterface(&fStateUI);
     fSynth->buildUserInterface(&fParameterUI);
+    // When no previous state was restored, init DSP controllers with their default values
+    if (!fStateUI.fRestored) {
+        fSynth->instanceResetUserInterface();
+    }
 #else
     fDSP->buildUserInterface(&fStateUI);
     fDSP->buildUserInterface(&fParameterUI);
+    // When no previous state was restored, init DSP controllers with their default values
+    if (!fStateUI.fRestored) {
+        fDSP->instanceResetUserInterface();
+    }
 #endif
     
     startTimerHz(25);
@@ -429,20 +447,20 @@ FaustPlugInAudioProcessor::~FaustPlugInAudioProcessor()
 AudioProcessor::BusesProperties FaustPlugInAudioProcessor::getBusesProperties()
 {
     if (PluginHostType::getPluginLoadedAs() == wrapperType_Standalone) {
-        if (gDSP.getNumInputs() == 0) {
-            return BusesProperties().withOutput("Output", AudioChannelSet::discreteChannels(std::min<int>(2, gDSP.getNumOutputs())), true);
+        if (FAUST_INPUTS == 0) {
+            return BusesProperties().withOutput("Output", AudioChannelSet::discreteChannels(std::min<int>(2, FAUST_OUTPUTS)), true);
         } else {
             return BusesProperties()
-            .withInput("Input", AudioChannelSet::discreteChannels(std::min<int>(2, gDSP.getNumInputs())), true)
-            .withOutput("Output", AudioChannelSet::discreteChannels(std::min<int>(2, gDSP.getNumOutputs())), true);
+            .withInput("Input", AudioChannelSet::discreteChannels(std::min<int>(2, FAUST_INPUTS)), true)
+            .withOutput("Output", AudioChannelSet::discreteChannels(std::min<int>(2, FAUST_OUTPUTS)), true);
         }
     } else {
-        if (gDSP.getNumInputs() == 0) {
-            return BusesProperties().withOutput("Output", AudioChannelSet::discreteChannels(gDSP.getNumOutputs()), true);
+        if (FAUST_INPUTS == 0) {
+            return BusesProperties().withOutput("Output", AudioChannelSet::discreteChannels(FAUST_OUTPUTS), true);
         } else {
             return BusesProperties()
-            .withInput("Input", AudioChannelSet::discreteChannels(gDSP.getNumInputs()), true)
-            .withOutput("Output", AudioChannelSet::discreteChannels(gDSP.getNumOutputs()), true);
+            .withInput("Input", AudioChannelSet::discreteChannels(FAUST_INPUTS), true)
+            .withOutput("Output", AudioChannelSet::discreteChannels(FAUST_OUTPUTS), true);
         }
     }
 }
@@ -520,10 +538,10 @@ void FaustPlugInAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     
     // Possibly adapt DSP
     if (fDSP->getNumInputs() > getTotalNumInputChannels() || fDSP->getNumOutputs() > getTotalNumOutputChannels()) {
-        fDSP = new dsp_adapter(fDSP.release(), getTotalNumInputChannels(), getTotalNumOutputChannels(), 4096);
+        fDSP = std::make_unique<dsp_adapter>(fDSP.release(), getTotalNumInputChannels(), getTotalNumOutputChannels(), 4096);
     }
    
-    // Setting the DSP control values has already been done by 'buildUserInterface(&fStateUI)', using the saved values.
+    // Setting the DSP control values has already been done by 'buildUserInterface(&fStateUI)', using the saved values or the default ones.
     // What has to be done to finish the DSP initialization is done now.
     mydsp::classInit(int(sampleRate));
     fDSP->instanceConstants(int(sampleRate));
@@ -611,15 +629,15 @@ AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 
 //==============================================================================
 FaustPlugInAudioProcessorEditor::FaustPlugInAudioProcessorEditor (FaustPlugInAudioProcessor& p)
-: AudioProcessorEditor (&p), processor (p), fJuceGUI(false)
+: AudioProcessorEditor (&p), processor (p), fJuceGUI(!p.fStateUI.fRestored)  // When no previous state was restored, setup GUI with default state of controllers
 {
-    addAndMakeVisible(fJuceGUI);
-    
 #ifdef JUCE_POLY
     p.fSynth->buildUserInterface(&fJuceGUI);
 #else
     p.fDSP->buildUserInterface(&fJuceGUI);
 #endif
+    
+    addAndMakeVisible(fJuceGUI);
     
     juce::Rectangle<int> recommendedSize = fJuceGUI.getSize();
     setSize (recommendedSize.getWidth(), recommendedSize.getHeight());

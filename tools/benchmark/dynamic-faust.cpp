@@ -50,6 +50,12 @@ static void splitTarget(const string& target, string& triple, string& cpu)
     }
 }
 
+static string replaceChar(string str, char src, char dst)
+{
+    replace(str.begin(), str.end(), src, dst);
+    return str;
+}
+
 template <typename T>
 static vector<string> bench(dsp_optimizer<T> optimizer, const string& name)
 {
@@ -61,24 +67,21 @@ int main(int argc, char* argv[])
 {
     if (argc == 1 || isopt(argv, "-h") || isopt(argv, "-help")) {
         cout << "dynamic-faust [-target xxx] [-opt (native|generic)] [additional Faust options (-vec -vs 8...)] foo.dsp" << endl;
-        cout << "Use '-target xxx' to cross-compile the code for a different architecture (like 'i386-apple-macosx10.6.0:opteron')\n";
+        cout << "Use '-target xxx' to cross-compile the code for a different architecture (like 'x86_64-apple-darwin15.6.0:haswell')\n";
         cout << "Use '-opt (native|generic)' to discover and compile with the optimal compilation parameters\n";
         cout << "Use '-o foo.ll' to generate an LLVM IR textual file\n";
         cout << "Use '-o foo.bc' to generate an LLVM bitcode file\n";
         cout << "Use '-o foo.mc' to generate an LLVM machine code file\n";
-        cout << "Use '-o foo.o' to generate an LLVM object code file\n";
+        cout << "Use '-o foo.o' to generate an object code file\n";
         return 0;
     }
     
-    string target = lopts(argv, "-target", "");
+    string target = lopts(argv, "-target", getDSPMachineTarget().c_str());
     bool is_opt = isopt(argv, "-opt");
     string opt = lopts(argv, "-opt", "generic");
     bool is_double = isopt(argv, "-double");
     
-    string in_filename = "";
-    string out_filename = "";
-    string error_msg;
-    
+    string in_filename, out_filename, error_msg;
     cout << "Libfaust version : " << getCLibFaustVersion () << endl;
     
     int argc1 = 0;
@@ -104,7 +107,6 @@ int main(int argc, char* argv[])
         cout << argv[i] << " ";
     }
     cout << endl;
-
     argv1[argc1] = nullptr;  // NULL terminated argv
     
     if (out_filename == "") {
@@ -112,14 +114,16 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
   
-    string opt_target = "";
+    string opt_target;
     vector<string> optimal_options;
+    
+    string triple, cpu;
+    splitTarget(getDSPMachineTarget(), triple, cpu);
+    cout << "Host : " << triple << ":" << cpu << "\n";
     
     if (is_opt) {
         
         if (opt == "generic") {
-            string triple, cpu;
-            splitTarget(getDSPMachineTarget(), triple, cpu);
             opt_target = triple + ":generic";
             cout << "Using 'generic' mode\n";
         } else {
@@ -128,7 +132,6 @@ int main(int argc, char* argv[])
         
         cout << "Looking for optimal parameters... \n";
         int buffer_size = 512;
-        
         try {
             if (is_double) {
                 optimal_options = bench(dsp_optimizer<double>(in_filename.c_str(), argc1, argv1, opt_target, buffer_size, 1, -1, false), in_filename);
@@ -149,13 +152,16 @@ int main(int argc, char* argv[])
         
         // Compilation target is the opt_target
         target = opt_target;
+    } else {
+        splitTarget(target, triple, cpu);
+        target = triple + ":" + replaceChar(cpu, '_', '-');
     }
     
     // Create factory
     cout << "Compiled with target : " << target << endl;
     llvm_dsp_factory* factory = createDSPFactoryFromFile(in_filename, argc1, argv1, target, error_msg, -1);
     if (!factory) {
-        cerr << "ERROR : cannot create factory : " << error_msg;
+        cerr << error_msg;
         exit(EXIT_FAILURE);
     }
     

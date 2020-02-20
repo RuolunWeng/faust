@@ -1,3 +1,4 @@
+/************************** BEGIN dsp-tools.h **************************/
 /************************************************************************
  FAUST Architecture File
  Copyright (C) 2003-2017 GRAME, Centre National de Creation Musicale
@@ -23,6 +24,9 @@
 
 #ifndef __dsp_tools__
 #define __dsp_tools__
+
+#include <assert.h>
+#include <string.h>
 
 #ifndef FAUSTFLOAT
 #define FAUSTFLOAT float
@@ -88,31 +92,33 @@ class Interleaver
     private:
         
         int fNumFrames;
-        int fNumChans;
-            
+        int fNumInputs;
+        int fNumOutputs;
+    
         FAUSTFLOAT* fInputs[256];
         FAUSTFLOAT* fOutput;
         
     public:
         
-        Interleaver(int numFrames, int numChans)
+        Interleaver(int numFrames, int numInputs, int numOutputs)
         {
             fNumFrames = numFrames;
-            fNumChans = numChans;
+            fNumInputs 	= std::max(numInputs, numOutputs);
+            fNumOutputs = numOutputs;
             
             // allocate separate input channels
-            for (int i = 0; i < fNumChans; i++) {
+            for (int i = 0; i < fNumInputs; i++) {
                 fInputs[i] = new FAUSTFLOAT[fNumFrames];
             }
             
             // allocate interleaved output channel
-            fOutput = new FAUSTFLOAT[fNumFrames * fNumChans];
+            fOutput = new FAUSTFLOAT[fNumFrames * fNumOutputs];
         }
         
         ~Interleaver()
         {
             // free separate input channels
-            for (int i = 0; i < fNumChans; i++) {
+            for (int i = 0; i < fNumInputs; i++) {
                 delete [] fInputs[i];
             }
             
@@ -127,8 +133,8 @@ class Interleaver
         void interleave()
         {
             for (int s = 0; s < fNumFrames; s++) {
-                for (int c = 0; c < fNumChans; c++) {
-                    fOutput[c + s * fNumChans] = fInputs[c][s];
+                for (int c = 0; c < fNumOutputs; c++) {
+                    fOutput[c + s * fNumOutputs] = fInputs[c][s];
                 }
             }
         }
@@ -145,9 +151,9 @@ class AudioChannels
     
     protected:
         
-        const unsigned int  fNumFrames;
-        const unsigned int  fNumChannels;
-        FAUSTFLOAT**        fChannels;
+        const unsigned int fNumFrames;
+        const unsigned int fNumChannels;
+        FAUSTFLOAT** fChannels;
         
     public:
         
@@ -158,9 +164,7 @@ class AudioChannels
             // allocate audio channels
             for (unsigned int i = 0; i < fNumChannels; i++) {
                 fChannels[i] = new FAUSTFLOAT[fNumFrames];
-                for (unsigned int j = 0; j < fNumFrames; j++) {
-                    fChannels[i][j] = 0;
-                }
+                memset(fChannels[i], 0, sizeof(FAUSTFLOAT) * fNumFrames);
             }
         }
         
@@ -222,3 +226,4 @@ class AudioChannels
 };
 
 #endif
+/**************************  END  dsp-tools.h **************************/

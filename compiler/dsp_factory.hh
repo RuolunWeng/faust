@@ -66,7 +66,7 @@ class dsp_factory_base {
 
     virtual void write(std::ostream* out, bool binary = false, bool small = false) = 0;
 
-    virtual void writeAux(std::ostream* out, bool binary = false, bool small = false) {}  // Helper functions
+    virtual void writeHelper(std::ostream* out, bool binary = false, bool small = false) {}  // Helper functions
 
     virtual std::string getBinaryCode() = 0;
 
@@ -162,12 +162,12 @@ class text_dsp_factory_aux : public dsp_factory_imp {
 
     virtual void write(std::ostream* out, bool binary = false, bool small = false) { *out << fCode; }
 
-    virtual void writeAux(std::ostream* out, bool binary = false, bool small = false) { *out << fHelpers; }
+    virtual void writeHelper(std::ostream* out, bool binary = false, bool small = false) { *out << fHelpers; }
 
     virtual std::string getBinaryCode() { return fCode; }
 };
 
-// Backend API
+// Backend API implemented in libcode.cpp
 
 dsp_factory_base* compileFaustFactory(int argc, const char* argv[], const char* name, const char* input,
                                       std::string& error_msg, bool generate);

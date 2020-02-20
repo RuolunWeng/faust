@@ -1,3 +1,4 @@
+/************************** BEGIN osc-dsp.h **************************/
 /************************************************************************
  FAUST Architecture File
  Copyright (C) 2003-2017 GRAME, Centre National de Creation Musicale
@@ -107,7 +108,7 @@ class oscdsp : public audio, public oscfaust::OSCIO {
                 int frame = i / inChans;
                 fInBuffers[c][frame] = val[i];
             }
-            compute (nvalues / inChans);
+            compute(nvalues / inChans);
         }
 
         int	getNumInputs() const	{ return fDsp ? fDsp->getNumInputs() : 0; }
@@ -116,3 +117,4 @@ class oscdsp : public audio, public oscfaust::OSCIO {
 };
 
 #endif
+/**************************  END  osc-dsp.h **************************/

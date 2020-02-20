@@ -1,3 +1,4 @@
+/************************** BEGIN JuceReader.h **************************/
 /************************************************************************
  FAUST Architecture File
  Copyright (C) 2018 GRAME, Centre National de Creation Musicale
@@ -26,6 +27,8 @@
 
 #include <assert.h>
 
+#include "../JuceLibraryCode/JuceHeader.h"
+
 #include "faust/gui/Soundfile.h"
 
 struct JuceReader : public SoundfileReader {
@@ -33,6 +36,8 @@ struct JuceReader : public SoundfileReader {
     AudioFormatManager fFormatManager;
     
     JuceReader() { fFormatManager.registerBasicFormats(); }
+    virtual ~JuceReader()
+    {}
     
     bool checkFile(const std::string& path_name)
     {
@@ -47,23 +52,21 @@ struct JuceReader : public SoundfileReader {
     
     void getParamsFile(const std::string& path_name, int& channels, int& length)
     {
-        ScopedPointer<AudioFormatReader> formatReader = fFormatManager.createReaderFor(File(path_name));
-        assert(formatReader);
+        std::unique_ptr<AudioFormatReader> formatReader (fFormatManager.createReaderFor (File (path_name)));
         channels = int(formatReader->numChannels);
         length = int(formatReader->lengthInSamples);
     }
     
     void readFile(Soundfile* soundfile, const std::string& path_name, int part, int& offset, int max_chan)
     {
-        ScopedPointer<AudioFormatReader> formatReader = fFormatManager.createReaderFor(File(path_name));
-        
-        int channels = std::min<int>(max_chan, int(formatReader->numChannels));
+        std::unique_ptr<AudioFormatReader> formatReader (fFormatManager.createReaderFor (File (path_name)));
         
         soundfile->fLength[part] = int(formatReader->lengthInSamples);
         soundfile->fSR[part] = int(formatReader->sampleRate);
         soundfile->fOffset[part] = offset;
         
-        FAUSTFLOAT* buffers[soundfile->fChannels];
+        FAUSTFLOAT** buffers = static_cast<FAUSTFLOAT**>(alloca(soundfile->fChannels * sizeof(FAUSTFLOAT*)));
+                                                             
         getBuffersOffset(soundfile, buffers, offset);
         
         if (formatReader->read(reinterpret_cast<int *const *>(buffers), int(formatReader->numChannels), 0, int(formatReader->lengthInSamples), false)) {
@@ -87,3 +90,4 @@ struct JuceReader : public SoundfileReader {
 };
 
 #endif
+/**************************  END  JuceReader.h **************************/
